@@ -10,8 +10,9 @@ export const CONFIG_KEYS = [
   "ns2",
   "masterAddress", // IP/hostname secondaries use to AXFR from master
   "secondaries", // JSON: [{ name, apiUrl, apiKey }]
-  "mxHost", // hostname nhận mail (vd mx.example.com) — trống = tắt tính năng mail
-  "mailCmd", // đường dẫn script mail-domain
+  "mxHost", // mail receiver hostname (e.g. mx.example.com) — empty = mail off
+  "mailAgentUrl", // zoner mail agent URL on the mail server
+  "mailAgentToken", // Bearer token of the mail agent
 ];
 
 const DEFAULTS = {
@@ -24,7 +25,8 @@ const DEFAULTS = {
   masterAddress: "127.0.0.1",
   secondaries: "[]",
   mxHost: "",
-  mailCmd: "/usr/local/sbin/mail-domain",
+  mailAgentUrl: "",
+  mailAgentToken: "",
 };
 
 export function getConfig() {
@@ -47,7 +49,9 @@ export function getConfig() {
 
 export function updateConfig(values) {
   for (const key of CONFIG_KEYS) {
-    if (key in values) setSetting(key, String(values[key] ?? ""));
+    // skip keys not present in the request — undefined means "don't touch"
+    if (key in values && values[key] !== undefined)
+      setSetting(key, String(values[key]));
   }
   return getConfig();
 }

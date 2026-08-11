@@ -1,12 +1,10 @@
-// Mail domains: quản lý /etc/postfix/transport qua script mail-domain
-// (chạy cùng máy với Postfix — xem docs/SETUP-PDNS.md).
-// Cần sudoers NOPASSWD cho lệnh mail-domain với user chạy backend:
-//   <user> ALL=(root) NOPASSWD: /usr/local/sbin/mail-domain
+// Mail domains: remote control of the mail receiver via the zoner mail agent
+// (HTTP + Bearer token, same pattern as PowerDNS API). The agent runs on the
+// mail server and manages /etc/postfix/transport — see docs/MAIL.md.
 import { Router } from "express";
-import { execFile } from "node:child_process";
 import { requireAuth } from "../auth.js";
 import { getConfig } from "../config.js";
-import { zoneByName, zonesByUser } from "../db.js";
+import { zoneByName } from "../db.js";
 import { getPdnsZone, patchPdnsZone, PdnsError } from "../pdns.js";
 
 const router = Router();
@@ -14,34 +12,51 @@ router.use(requireAuth);
 
 const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/i;
 
-const mailCmd = () => getConfig().mailCmd || "/usr/local/sbin/mail-domain";
-
-function runMailDomain(args) {
-  return new Promise((resolve, reject) => {
-    // execFile không qua shell → an toàn với input
-    execFile(
-      "sudo",
-      ["-n", mailCmd(), ...args],
-      { timeout: 15000 },
-      (err, stdout, stderr) => {
-        if (err) return reject(new Error((stderr || err.message).trim()));
-        resolve(stdout.trim());
-      }
+async function agentRequest(method, path, body) {
+  const cfg = getConfig();
+  if (!cfg.mailAgentUrl || !cfg.mailAgentToken) {
+    const err = new Error(
+      "Mail agent is not configured — set Agent URL + token in Settings"
     );
-  });
+    err.status = 400;
+    throw err;
+  }
+  let res;
+  try {
+    res = await fetch(`${cfg.mailAgentUrl.replace(/\/$/, "")}${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${cfg.mailAgentToken}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch {
+    const err = new Error(`Cannot reach mail agent at ${cfg.mailAgentUrl}`);
+    err.status = 502;
+    throw err;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error || `Mail agent error ${res.status}`);
+    err.status = res.status === 401 ? 502 : res.status;
+    throw err;
+  }
+  return data;
 }
 
 // GET /mail/domains
 router.get("/domains", async (_req, res) => {
   try {
-    const out = await runMailDomain(["list"]);
-    res.json({ domains: out ? out.split("\n").filter(Boolean) : [] });
+    res.json(await agentRequest("GET", "/domains"));
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
-/** Nếu domain trùng với 1 zone đang quản lý → tự thêm MX record về mxHost */
+/** If the domain matches a managed zone → auto-create MX record to mxHost */
 async function ensureMxRecord(domain, userId) {
   const cfg = getConfig();
   if (!cfg.mxHost) return null;
@@ -67,11 +82,11 @@ router.post("/domains", async (req, res) => {
   if (!DOMAIN_RE.test(domain))
     return res.status(400).json({ error: "Invalid domain name" });
   try {
-    await runMailDomain(["add", domain]);
+    await agentRequest("POST", "/domains", { domain });
   } catch (err) {
-    return res.status(502).json({ error: err.message });
+    return res.status(err.status || 502).json({ error: err.message });
   }
-  // Tự thêm MX record nếu zone tồn tại trong dashboard
+  // Auto-create the MX record if the zone is managed in the dashboard
   let mx = null;
   try {
     mx = await ensureMxRecord(domain, req.user.id);
@@ -87,9 +102,9 @@ router.delete("/domains/:domain", async (req, res) => {
   if (!DOMAIN_RE.test(domain))
     return res.status(400).json({ error: "Invalid domain name" });
   try {
-    await runMailDomain(["remove", domain]);
+    await agentRequest("DELETE", `/domains/${domain}`);
   } catch (err) {
-    return res.status(502).json({ error: err.message });
+    return res.status(err.status || 502).json({ error: err.message });
   }
   res.json({ message: "Mail domain removed" });
 });

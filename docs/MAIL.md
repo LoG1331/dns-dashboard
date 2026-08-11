@@ -1,35 +1,54 @@
 # Mail integration (Postfix catch-all → webhook)
 
-Zoner can manage the mail receiver from the dashboard (tab **Mail**) when it runs on the same machine as Postfix (e.g. ns1).
-
-## How it works
+Zoner manages the mail receiver remotely from the dashboard (tab **Mail**), the same way it talks to PowerDNS: an HTTP agent on the mail server, URL + Bearer token.
 
 ```
 Dashboard "Mail" tab
-  → backend API /api/mail/domains
-  → sudo -n /usr/local/sbin/mail-domain <add|remove|list>
-  → /etc/postfix/transport + relay_domains + postfix reload
+  → zoner backend /api/mail/*
+  → HTTP + Bearer token
+  → mail-agent (mail server :9099)
+  → mail-domain → /opt/zoner-mail/transport → postmap + reload postfix
 ```
 
-Adding a mail domain also auto-creates an MX record (`10 <mxHost>`) in the matching zone if that zone is managed in the dashboard.
+## 1. Bootstrap the mail server (one command)
 
-## Setup (once, on the mail server)
-
-1. Postfix + the mail-domain script as in your notes (`custom_receiver.md`): `mail-forwarder`, webhook pipe in `master.cf`, `/usr/local/sbin/mail-domain`.
-
-2. Allow the user running zoner to call `mail-domain` without a password:
+On the mail VPS (Ubuntu, sudo):
 
 ```bash
-echo '<zoner-user> ALL=(root) NOPASSWD: /usr/local/sbin/mail-domain' | sudo tee /etc/sudoers.d/zoner-mail
-sudo chmod 440 /etc/sudoers.d/zoner-mail
+sudo MX_HOSTNAME=mx.example.com \
+     WEBHOOK_URL=https://your-app/v1/inbound/email \
+     bash backend/scripts/install-mail-server.sh
 ```
 
-3. In the dashboard **Settings** page:
-   - **MX Hostname**: e.g. `mx.example.com` (the A record pointing at this server's public IP, DNS-only on Cloudflare)
-   - Mail command defaults to `/usr/local/sbin/mail-domain` (changeable via config key `mailCmd`)
+The script does everything: opens TCP/25, installs Postfix (Internet Site) + Python, installs the forwarder + mail-domain + agent into **`/opt/zoner-mail/`**, registers the webhook pipe in `master.cf` (marked block), and starts the `zoner-mail-agent` systemd service. It prints the **agent URL + token** at the end — save them.
 
-## Notes
+Everything custom lives in `/opt/zoner-mail/`. Clean removal:
 
-- Domains are validated with a strict regex and passed via `execFile` (no shell) — no injection.
-- DNS side still needs per-domain: `MX @ 10 mx.example.com` (auto-created by the dashboard when the zone exists) and the `mx.` A record.
-- If the mail-domain script is missing or sudoers is not configured, the Mail tab shows the error from the command.
+```bash
+sudo bash backend/scripts/install-mail-server.sh --uninstall
+```
+
+## 2. Dashboard Settings
+
+| Field | Value |
+|---|---|
+| MX Hostname | `mx.example.com` |
+| Mail Agent URL | `http://<mail-server-ip>:9099` |
+| Agent Token | from the install output |
+
+## 3. DNS
+
+- `A` record: `mx.example.com` → mail server public IP (Cloudflare: **DNS only**)
+- MX per domain is **auto-created** by the dashboard when the zone exists
+
+## 4. Use
+
+Tab **Mail** → add domain → the zone gets its MX record automatically and the mail server starts accepting `*@domain` (catch-all → webhook).
+
+## 5. Test
+
+```bash
+journalctl -u postfix -f | grep --line-buffered postfix
+# send a mail to anything@your-domain, success looks like:
+#   relay=webhook, status=sent
+```

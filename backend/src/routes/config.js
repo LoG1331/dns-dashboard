@@ -26,7 +26,7 @@ router.get("/", async (_req, res) => {
 
 // PUT /config — update config
 router.put("/", (req, res) => {
-  const { pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailCmd } = req.body || {};
+  const { pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailAgentUrl, mailAgentToken } = req.body || {};
   if (zoneKind !== undefined && !["Native", "Master", "Slave"].includes(zoneKind))
     return res.status(400).json({ error: "zoneKind must be Native, Master or Slave" });
   if (pdnsApiUrl !== undefined && pdnsApiUrl) {
@@ -49,7 +49,7 @@ router.put("/", (req, res) => {
       });
     }
   }
-  const cfg = updateConfig({ pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailCmd });
+  const cfg = updateConfig({ pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailAgentUrl, mailAgentToken });
   res.json({ message: "Config saved", ...cfg });
 });
 
