@@ -1,11 +1,11 @@
 {
-  "name": "@log1331/pdash",
+  "name": "zoner",
   "version": "1.0.0",
   "description": "Self-hosted PowerDNS management panel — web UI + API backend in one package",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "pdash": "bin/cli.js"
+    "zoner": "bin/cli.js"
   },
   "files": [
     "bin/",

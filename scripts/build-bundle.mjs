@@ -1,6 +1,6 @@
 // Build the single-file bundle: backend + embedded frontend (base64).
 //   node scripts/build-bundle.mjs
-// Output: bundle/pdash.js (no node_modules needed at runtime)
+// Output: bundle/zoner.js (no node_modules needed at runtime)
 import * as esbuild from "esbuild";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,11 +39,11 @@ await esbuild.build({
   platform: "node",
   format: "esm",
   target: "node22",
-  outfile: path.join(OUT, "pdash.js"),
+  outfile: path.join(OUT, "zoner.js"),
   banner: {
     js: 'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);',
   },
 });
 
-const size = fs.statSync(path.join(OUT, "pdash.js")).size;
-console.log(`Bundle: bundle/pdash.js (${(size / 1024).toFixed(0)} KB)`);
+const size = fs.statSync(path.join(OUT, "zoner.js")).size;
+console.log(`Bundle: bundle/zoner.js (${(size / 1024).toFixed(0)} KB)`);

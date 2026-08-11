@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// pdash CLI — runs both the backend and the prebuilt frontend
+// zoner CLI — runs both the backend and the prebuilt frontend
 // in a single process.
 //
-//   npx pdash            # or after global install: pdash
-//   pdash --port 8080 --host 0.0.0.0
+//   npx zoner            # or after global install: zoner
+//   zoner --port 8080 --host 0.0.0.0
 //
-// On first run it creates ~/.local/pdash/ (DB + .env with random
+// On first run it creates ~/.local/zoner/ (DB + .env with random
 // secrets) and prints the admin password exactly once.
 import fs from "node:fs";
 import path from "node:path";
@@ -28,16 +28,16 @@ const loadEnv = (file) => {
 // ---------- CLI args ----------
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
-  console.log(`pdash — self-hosted PowerDNS management panel
+  console.log(`zoner — self-hosted PowerDNS management panel
 
-Usage: pdash [options]
+Usage: zoner [options]
 
 Options:
   --port <n>     Port to listen on (default 5001)
   --host <addr>  Listen address, IP or 0.0.0.0 (default 0.0.0.0)
   --help         Show this help
 
-Config lives in ~/.local/pdash/ (or $PDASH_HOME).
+Config lives in ~/.local/zoner/ (or $ZONER_HOME).
 PowerDNS connection is configured from the Settings page after login.`);
   process.exit(0);
 }
@@ -48,8 +48,8 @@ const argValue = (flag) => {
 
 // ---------- Data dir + first-run seed ----------
 const dataDir =
-  process.env.PDASH_HOME ||
-  path.join(os.homedir(), ".local", "pdash");
+  process.env.ZONER_HOME ||
+  path.join(os.homedir(), ".local", "zoner");
 fs.mkdirSync(dataDir, { recursive: true });
 
 const envFile = path.join(dataDir, ".env");
@@ -87,7 +87,7 @@ if (argValue("--host")) process.env.HOST = argValue("--host");
 process.env.FRONTEND_EMBED = "true";
 process.env.DB_FILE = path.join(dataDir, "data.sqlite");
 
-await import(path.join(PKG_ROOT, "bundle", "pdash.js"));
+await import(path.join(PKG_ROOT, "bundle", "zoner.js"));
 
 if (firstRun) {
   console.log("");
