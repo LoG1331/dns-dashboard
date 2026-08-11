@@ -27,15 +27,23 @@ Self-hosted DNS management panel powered by **PowerDNS** — modern web frontend
 ### Option 1: npm (simplest)
 
 ```bash
-npm install -g zoner   # or: npx zoner
-zoner                  # open http://localhost:5001
+npm install -g @log1331/zoner   # or: npx @log1331/zoner
+zoner                           # open http://localhost:5001
 ```
 
-On first run it creates `~/.zoner/` and prints the admin password exactly once. Point it at your PowerDNS server from the Settings page after logging in.
+On first run it creates `~/.local/zoner/` and prints the admin password exactly once. Point it at your PowerDNS server from the Settings page after logging in.
 
-> Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g zoner`. The dashboard stores its data in `~/.zoner` of whichever user runs it (run with `sudo` → `/root/.zoner`).
+> Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g @log1331/zoner`. The dashboard stores its data in `~/.local/zoner` of whichever user runs it (run with `sudo` → `/root/.local/zoner`).
 
-### Option 2: from source
+### Option 2: one-command bootstrap (rootless)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/LoG1331/dns-dashboard/main/scripts/bootstrap.sh | bash
+```
+
+Installs Node 22 into `~/.local` if missing, downloads the release, seeds random secrets (printed once), and runs via a systemd user service or nohup. Optional variables: `INSTALL_DIR`, `REPO_URL`.
+
+### Option 3: from source
 
 ```bash
 # 1. Spin up 2 test PowerDNS servers (master ns1 + slave ns2) with podman:
@@ -59,16 +67,4 @@ sudo bash install-pdns.sh master   # on ns1
 sudo bash install-pdns.sh slave    # on ns2
 ```
 
-## One-command deploy (bootstrap — dashboard only, ROOTLESS)
-
-Host the `scripts/bootstrap.sh` file + a release tarball somewhere (GitHub raw, object storage...), then on a clean Ubuntu server (**no sudo required**):
-
-```bash
-curl -fsSL <URL>/bootstrap.sh | bash
-```
-
-The script automatically: checks for node — skips if node ≥ 22 is present, otherwise downloads the official build to `~/.local/bin` → extracts the release into `~/.local/share/zoner` → builds the frontend → **seeds `.env` with a random JWT_SECRET + admin password** (printed exactly once) → runs via a systemd **user service** (if available) or nohup. The production backend also serves the built frontend (single port, `SERVE_FRONTEND=true`).
-
-> PowerDNS is installed separately via `backend/scripts/install-pdns.sh` on the nameservers — bootstrap does not touch it. The PowerDNS connection (API URL, key, nameservers, secondaries) is configured from the Settings page after login — stored in the DB, not read from env.
-
-Optional variables: `INSTALL_DIR`, `REPO_URL`.
+> PowerDNS connection (API URL, key, nameservers, zone kind, secondaries) is configured from the Settings page after login — stored in the DB, not read from env.
