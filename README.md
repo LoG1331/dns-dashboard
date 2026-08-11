@@ -35,15 +35,7 @@ On first run it creates `~/.local/zoner/` and prints the admin password exactly 
 
 > Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g @log1331/zoner`. The dashboard stores its data in `~/.local/zoner` of whichever user runs it (run with `sudo` → `/root/.local/zoner`).
 
-### Option 2: one-command bootstrap (rootless)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/LoG1331/dns-dashboard/main/scripts/bootstrap.sh | bash
-```
-
-Installs Node 22 into `~/.local` if missing, downloads the release, seeds random secrets (printed once), and runs via a systemd user service or nohup. Optional variables: `INSTALL_DIR`, `REPO_URL`.
-
-### Option 3: from source
+### Option 2: from source
 
 ```bash
 # 1. Spin up 2 test PowerDNS servers (master ns1 + slave ns2) with podman:
