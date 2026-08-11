@@ -5,6 +5,7 @@ import authRouter from "./routes/auth.js";
 import zonesRouter, { syncZones } from "./routes/zones.js";
 import configRouter from "./routes/config.js";
 import templatesRouter from "./routes/templates.js";
+import mailRouter from "./routes/mail.js";
 import { seedAdmin, firstUser } from "./db.js";
 import { hashPassword } from "./auth.js";
 
@@ -38,6 +39,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/zones", zonesRouter);
 app.use("/api/config", configRouter);
 app.use("/api/templates", templatesRouter);
+app.use("/api/mail", mailRouter);
 
 // 404 for remaining /api routes
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found" }));

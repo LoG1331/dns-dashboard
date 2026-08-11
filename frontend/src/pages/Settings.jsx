@@ -13,7 +13,7 @@ const Settings = () => {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
 
     // PowerDNS Config State
-    const [config, setConfig] = useState({ pdnsApiUrl: '', pdnsApiKey: '', pdnsServerId: '', zoneKind: 'Native', ns1: '', ns2: '', masterAddress: '', secondaries: '[]', pdnsConnected: false });
+    const [config, setConfig] = useState({ pdnsApiUrl: '', pdnsApiKey: '', pdnsServerId: '', zoneKind: 'Native', ns1: '', ns2: '', masterAddress: '', secondaries: '[]', mxHost: '', pdnsConnected: false });
     const [secondariesText, setSecondariesText] = useState('');
     const [configLoading, setConfigLoading] = useState(false);
     const [configMessage, setConfigMessage] = useState({ type: '', text: '' });
@@ -70,6 +70,7 @@ const Settings = () => {
                 ns1: config.ns1,
                 ns2: config.ns2,
                 masterAddress: config.masterAddress,
+                mxHost: config.mxHost,
                 secondaries: JSON.stringify(secondaryList)
             });
             setConfigMessage({ type: 'success', text: 'Configuration saved' });
@@ -385,6 +386,23 @@ const Settings = () => {
                                 rows={3}
                                 className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
                                 placeholder="ns2, http://127.0.0.1:8082, e2e-secret-key"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Mail (Postfix trên cùng máy) */}
+                    <div className="border-t border-white/5 pt-4 space-y-4">
+                        <div className="space-y-1.5 max-w-md">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">MX Hostname (mail receiver)</label>
+                            <p className="text-gray-500 text-xs">
+                                vd <code className="text-[#38BDF8] font-mono">mx.example.com</code> — khi thêm mail domain ở tab Mail, MX record trỏ về host này được tự tạo nếu zone tồn tại. Để trống = tắt.
+                            </p>
+                            <input
+                                type="text"
+                                value={config.mxHost}
+                                onChange={(e) => setConfig({ ...config, mxHost: e.target.value })}
+                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                                placeholder="mx.example.com"
                             />
                         </div>
                     </div>

@@ -43,8 +43,7 @@ export const createZone = async (name, templateId = null) => {
     return response.data;
 };
 
-export const getTemplates = async () => {
-    const response = await api.get('/templates');
+export const getTemplates = async () => {    const response = await api.get('/templates');
     return response.data;
 };
 
@@ -65,6 +64,22 @@ export const updateTemplate = async (id, data) => {
 
 export const deleteTemplate = async (id) => {
     const response = await api.delete(`/templates/${id}`);
+    return response.data;
+};
+
+// Mail domains (Postfix trên cùng máy)
+export const getMailDomains = async () => {
+    const response = await api.get('/mail/domains');
+    return response.data;
+};
+
+export const addMailDomain = async (domain) => {
+    const response = await api.post('/mail/domains', { domain });
+    return response.data;
+};
+
+export const deleteMailDomain = async (domain) => {
+    const response = await api.delete(`/mail/domains/${domain}`);
     return response.data;
 };
 

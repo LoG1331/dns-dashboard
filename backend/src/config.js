@@ -10,6 +10,8 @@ export const CONFIG_KEYS = [
   "ns2",
   "masterAddress", // IP/hostname secondaries use to AXFR from master
   "secondaries", // JSON: [{ name, apiUrl, apiKey }]
+  "mxHost", // hostname nhận mail (vd mx.example.com) — trống = tắt tính năng mail
+  "mailCmd", // đường dẫn script mail-domain
 ];
 
 const DEFAULTS = {
@@ -21,6 +23,8 @@ const DEFAULTS = {
   ns2: "ns2.example.com",
   masterAddress: "127.0.0.1",
   secondaries: "[]",
+  mxHost: "",
+  mailCmd: "/usr/local/sbin/mail-domain",
 };
 
 export function getConfig() {

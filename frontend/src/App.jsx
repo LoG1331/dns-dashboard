@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import Settings from './pages/Settings';
 import Templates from './pages/Templates';
 import TemplateDetails from './pages/TemplateDetails';
+import MailPage from './pages/Mail';
 import Layout from './components/Layout';
 import { ToastProvider } from './components/Toast';
 import './index.css';
@@ -29,6 +30,7 @@ function App() {
               <Route path="/zones/:id" element={<ZoneDetails />} />
               <Route path="/templates" element={<Templates />} />
               <Route path="/templates/:id" element={<TemplateDetails />} />
+              <Route path="/mail" element={<MailPage />} />
               <Route path="/settings" element={<Settings />} />
               {/* Fallback to dashboard for unknown routes within layout? Or public 404? */}
               {/* For now, just redirecting / to landing is handled above */}

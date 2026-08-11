@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Settings, LogOut, Menu, X, LayoutTemplate } from 'lucide-react';
+import { LayoutDashboard, Settings, LogOut, Menu, X, LayoutTemplate, Mail } from 'lucide-react';
 import api from '../services/api';
 
 const SidebarItem = ({ icon: Icon, label, to, active }) => (
@@ -78,6 +78,7 @@ const Layout = ({ children }) => {
                 <nav className="flex-1 space-y-1">
                     <SidebarItem icon={LayoutDashboard} label="Dashboard" to="/dashboard" active={location.pathname === '/dashboard'} />
                     <SidebarItem icon={LayoutTemplate} label="Templates" to="/templates" active={location.pathname === '/templates'} />
+                    <SidebarItem icon={Mail} label="Mail" to="/mail" active={location.pathname === '/mail'} />
                     <SidebarItem icon={Settings} label="Settings" to="/settings" active={location.pathname === '/settings'} />
                 </nav>
 
