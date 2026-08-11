@@ -9,9 +9,7 @@
   },
   "files": [
     "bin/",
-    "bundle/",
-    "docs/",
-    "README.md"
+    "bundle/"
   ],
   "scripts": {
     "build": "node scripts/build-bundle.mjs",
