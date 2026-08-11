@@ -84,11 +84,10 @@ postconf -e 'webhook_destination_recipient_limit = 1'
 echo "==> Installing custom files into $OPT..."
 mkdir -p "$OPT"
 touch "$OPT/transport"
-cp "$AGENT_DIR/mail-agent.js" "$OPT/mail-agent.js"
+cp "$AGENT_DIR/mail-agent.py" "$OPT/mail-agent.py"
 cp "$AGENT_DIR/mail-domain" "$OPT/mail-domain"
 cp "$AGENT_DIR/mail-forwarder.py" "$OPT/mail-forwarder"
-chmod 755 "$OPT/mail-domain" "$OPT/mail-forwarder"
-chmod 644 "$OPT/mail-agent.js"
+chmod 755 "$OPT/mail-domain" "$OPT/mail-forwarder" "$OPT/mail-agent.py"
 
 if [[ ! -f "$OPT/mail-forwarder.json" ]]; then
   cat > "$OPT/mail-forwarder.json" <<EOF
@@ -118,7 +117,7 @@ Description=zoner mail agent
 After=network.target postfix.service
 
 [Service]
-ExecStart=$(command -v node) ${OPT}/mail-agent.js
+ExecStart=$(command -v python3) ${OPT}/mail-agent.py
 Restart=always
 RestartSec=3
 Environment=AGENT_PORT=${AGENT_PORT}
@@ -129,12 +128,7 @@ Environment=MAIL_CMD=${OPT}/mail-domain
 WantedBy=multi-user.target
 EOF
 
-# Node is required for the agent
-if ! command -v node >/dev/null; then
-  echo "==> Installing Node.js 22 (agent runtime)..."
-  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
-  apt-get install -y -qq nodejs >/dev/null
-fi
+# Agent chạy bằng python3 (đã cài ở bước packages) — không cần thêm runtime
 
 systemctl daemon-reload
 systemctl enable --now "$SERVICE"
