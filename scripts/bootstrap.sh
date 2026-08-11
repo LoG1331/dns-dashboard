@@ -41,8 +41,8 @@ else
   esac
   mkdir -p "$HOME/.local"
   NODE_VER=$(curl -fsSL "https://nodejs.org/dist/index.json" | grep -o "\"version\":\"v${NODE_MAJOR}[^\"]*\"" | head -1 | cut -d'"' -f4)
-  curl -fsSL "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-${NODE_ARCH}.tar.xz" \
-    | tar -xJ -C "$HOME/.local" --strip-components=1
+  curl -fsSL "https://nodejs.org/dist/${NODE_VER}/node-${NODE_VER}-${NODE_ARCH}.tar.gz" \
+    | tar -xz -C "$HOME/.local" --strip-components=1
   export PATH="$HOME/.local/bin:$PATH"
   echo "    Installed $(node -v) into ~/.local"
   echo "    (add to your shell rc for long-term use: export PATH=\"\$HOME/.local/bin:\$PATH\")"
