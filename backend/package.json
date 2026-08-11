@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Backend cho Stackryze DNS frontend - giao tiếp trực tiếp PowerDNS API",
+  "description": "DNS Dashboard backend - talks directly to the PowerDNS HTTP API",
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",

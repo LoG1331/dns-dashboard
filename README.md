@@ -24,9 +24,22 @@ Self-hosted DNS management panel powered by **PowerDNS** — modern web frontend
 
 ## Quick start
 
+### Option 1: npm (simplest)
+
+```bash
+npm install -g dns-dashboard   # or: npx dns-dashboard
+dns-dashboard                  # open http://localhost:5001
+```
+
+On first run it creates `~/.dns-dashboard/` and prints the admin password exactly once. Point it at your PowerDNS server from the Settings page after logging in.
+
+> Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g dns-dashboard`. The dashboard stores its data in `~/.dns-dashboard` of whichever user runs it (run with `sudo` → `/root/.dns-dashboard`).
+
+### Option 2: from source
+
 ```bash
 # 1. Spin up 2 test PowerDNS servers (master ns1 + slave ns2) with podman:
-cd backend && bash scripts/setup-pdns.sh        # automatically writes config to backend/.env
+cd backend && bash scripts/setup-pdns.sh        # seeds config straight into the DB
 
 # 2. Backend:
 cd backend && npm install && npm run dev        # :5001
@@ -56,6 +69,6 @@ curl -fsSL <URL>/bootstrap.sh | bash
 
 The script automatically: checks for node — skips if node ≥ 22 is present, otherwise downloads the official build to `~/.local/bin` → extracts the release into `~/.local/share/dns-dashboard` → builds the frontend → **seeds `.env` with a random JWT_SECRET + admin password** (printed exactly once) → runs via a systemd **user service** (if available) or nohup. The production backend also serves the built frontend (single port, `SERVE_FRONTEND=true`).
 
-> PowerDNS is installed separately via `backend/scripts/install-pdns.sh` on the nameservers — bootstrap does not touch it. If PowerDNS is on another machine, pass `PDNS_API_URL=http://<ns1-ip>:8081` and `PDNS_API_KEY=<ns1 key>` when running (or edit later on the Settings page).
+> PowerDNS is installed separately via `backend/scripts/install-pdns.sh` on the nameservers — bootstrap does not touch it. The PowerDNS connection (API URL, key, nameservers, secondaries) is configured from the Settings page after login — stored in the DB, not read from env.
 
-Optional variables: `INSTALL_DIR`, `PDNS_API_URL`, `PDNS_API_KEY`, `NS1_HOST`, `NS2_HOST`.
+Optional variables: `INSTALL_DIR`, `REPO_URL`.

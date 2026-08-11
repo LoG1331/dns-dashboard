@@ -1,0 +1,9 @@
+node_modules/
+.env
+data.sqlite
+*.log
+frontend/src/
+frontend/public/
+frontend/*.config.*
+frontend/index.html
+frontend/package*.json

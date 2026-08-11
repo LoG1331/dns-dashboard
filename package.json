@@ -1,0 +1,36 @@
+{
+  "name": "dns-dashboard",
+  "version": "1.0.0",
+  "description": "Self-hosted PowerDNS management panel — web UI + API backend in one package",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "dns-dashboard": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "backend/src/",
+    "frontend/dist/",
+    "docs/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2"
+  },
+  "keywords": [
+    "dns",
+    "powerdns",
+    "dns-management",
+    "self-hosted",
+    "dashboard"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/LoG1331/dns-dashboard.git"
+  }
+}
