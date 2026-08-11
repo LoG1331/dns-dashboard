@@ -43,8 +43,13 @@ app.use("/api/templates", templatesRouter);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Not found" }));
 
 // Serve frontend build (production: single port)
-// SERVE_FRONTEND=true, FRONTEND_DIST=path to frontend/dist
-if (process.env.SERVE_FRONTEND === "true") {
+// SERVE_FRONTEND=true + FRONTEND_DIST=path to frontend/dist
+// FRONTEND_EMBED=true → serve the embedded copy (bundled single-file build)
+if (process.env.FRONTEND_EMBED === "true") {
+  const { FILES } = await import("./frontend-files.js");
+  const { serveEmbedded } = await import("./serve-embedded.js");
+  serveEmbedded(app, FILES);
+} else if (process.env.SERVE_FRONTEND === "true") {
   const dist =
     process.env.FRONTEND_DIST ||
     new URL("../../frontend/dist", import.meta.url).pathname;

@@ -1,8 +1,8 @@
 node_modules/
 dist/
+bundle/
 .env
 data.sqlite
 *.log
 *.tgz
-
 email_worker/

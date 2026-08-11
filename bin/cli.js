@@ -12,10 +12,18 @@ import path from "node:path";
 import crypto from "node:crypto";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import dotenv from "dotenv";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PKG_ROOT = path.join(__dirname, "..");
+
+// Tiny .env parser (zero dependencies; does not override existing env)
+const loadEnv = (file) => {
+  if (!fs.existsSync(file)) return;
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+  }
+};
 
 // ---------- CLI args ----------
 const args = process.argv.slice(2);
@@ -68,18 +76,17 @@ if (!fs.existsSync(envFile)) {
     ].join("\n")
   );
 }
-dotenv.config({ path: envFile });
+loadEnv(envFile);
 
 // CLI args override .env
 if (argValue("--port")) process.env.PORT = argValue("--port");
 if (argValue("--host")) process.env.HOST = argValue("--host");
 
-// ---------- npm package mode: serve the prebuilt frontend ----------
-process.env.SERVE_FRONTEND = "true";
-process.env.FRONTEND_DIST = path.join(PKG_ROOT, "frontend", "dist");
+// ---------- npm package mode: single bundled file, frontend embedded ----------
+process.env.FRONTEND_EMBED = "true";
 process.env.DB_FILE = path.join(dataDir, "data.sqlite");
 
-await import(path.join(PKG_ROOT, "backend", "src", "index.js"));
+await import(path.join(PKG_ROOT, "bundle", "dns-dashboard.js"));
 
 if (firstRun) {
   console.log("");
