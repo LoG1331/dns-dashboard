@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// pdnsdash CLI — runs both the backend and the prebuilt frontend
+// pdash CLI — runs both the backend and the prebuilt frontend
 // in a single process.
 //
-//   npx pdnsdash            # or after global install: pdnsdash
-//   pdnsdash --port 8080 --host 0.0.0.0
+//   npx pdash            # or after global install: pdash
+//   pdash --port 8080 --host 0.0.0.0
 //
-// On first run it creates ~/.local/pdnsdash/ (DB + .env with random
+// On first run it creates ~/.local/pdash/ (DB + .env with random
 // secrets) and prints the admin password exactly once.
 import fs from "node:fs";
 import path from "node:path";
@@ -28,16 +28,16 @@ const loadEnv = (file) => {
 // ---------- CLI args ----------
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
-  console.log(`pdnsdash — self-hosted PowerDNS management panel
+  console.log(`pdash — self-hosted PowerDNS management panel
 
-Usage: pdnsdash [options]
+Usage: pdash [options]
 
 Options:
   --port <n>     Port to listen on (default 5001)
   --host <addr>  Listen address, IP or 0.0.0.0 (default 0.0.0.0)
   --help         Show this help
 
-Config lives in ~/.local/pdnsdash/ (or $PDNSDASH_HOME).
+Config lives in ~/.local/pdash/ (or $PDASH_HOME).
 PowerDNS connection is configured from the Settings page after login.`);
   process.exit(0);
 }
@@ -48,8 +48,8 @@ const argValue = (flag) => {
 
 // ---------- Data dir + first-run seed ----------
 const dataDir =
-  process.env.PDNSDASH_HOME ||
-  path.join(os.homedir(), ".local", "pdnsdash");
+  process.env.PDASH_HOME ||
+  path.join(os.homedir(), ".local", "pdash");
 fs.mkdirSync(dataDir, { recursive: true });
 
 const envFile = path.join(dataDir, ".env");
@@ -87,7 +87,7 @@ if (argValue("--host")) process.env.HOST = argValue("--host");
 process.env.FRONTEND_EMBED = "true";
 process.env.DB_FILE = path.join(dataDir, "data.sqlite");
 
-await import(path.join(PKG_ROOT, "bundle", "pdnsdash.js"));
+await import(path.join(PKG_ROOT, "bundle", "pdash.js"));
 
 if (firstRun) {
   console.log("");

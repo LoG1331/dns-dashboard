@@ -1,11 +1,11 @@
 {
-  "name": "pdnsdash",
+  "name": "@log1331/pdash",
   "version": "1.0.0",
   "description": "Self-hosted PowerDNS management panel — web UI + API backend in one package",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "pdnsdash": "bin/cli.js"
+    "pdash": "bin/cli.js"
   },
   "files": [
     "bin/",

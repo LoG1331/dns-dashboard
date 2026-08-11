@@ -9,7 +9,7 @@
 #
 # Environment variables (optional):
 #   REPO_URL=...      — release tarball URL (.tar.gz) or local file path
-#   INSTALL_DIR=~/.local/share/pdnsdash
+#   INSTALL_DIR=~/.local/share/pdash
 #
 # The script automatically: installs Node 22 into ~/.local IF node >= 22
 # is not already present, downloads the release, builds the frontend,
@@ -21,8 +21,8 @@
 # ============================================================
 set -euo pipefail
 
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/share/pdnsdash}"
-REPO_URL="${REPO_URL:-https://github.com/LoG1331/pdnsdash/releases/download/v1.0.0/pdnsdash-v1.0.0.tar.gz}"
+INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/share/pdash}"
+REPO_URL="${REPO_URL:-https://github.com/LoG1331/pdash/releases/download/v1.0.0/pdash-v1.0.0.tar.gz}"
 BACKEND_PORT=5001
 NODE_MAJOR=22
 
@@ -97,7 +97,7 @@ EOF
 echo "==> [5/5] Registering service..."
 if command -v systemctl >/dev/null 2>&1 && systemctl --user is-system-running >/dev/null 2>&1; then
   mkdir -p "$HOME/.config/systemd/user"
-  cat > "$HOME/.config/systemd/user/pdnsdash.service" <<EOF
+  cat > "$HOME/.config/systemd/user/pdash.service" <<EOF
 [Unit]
 Description=DNS Dashboard (backend + frontend)
 After=network.target
@@ -113,14 +113,14 @@ Environment=NODE_ENV=production
 WantedBy=default.target
 EOF
   systemctl --user daemon-reload
-  systemctl --user enable --now pdnsdash
+  systemctl --user enable --now pdash
   echo "    systemd user service is running"
   SYSTEMD_USER=1
 else
   echo "    No systemd user — running via nohup"
   cd "$INSTALL_DIR/backend"
   pkill -f "node src/index.js" 2>/dev/null || true
-  setsid nohup node src/index.js >"$HOME/.local/share/pdnsdash.log" 2>&1 &
+  setsid nohup node src/index.js >"$HOME/.local/share/pdash.log" 2>&1 &
 fi
 
 echo ""

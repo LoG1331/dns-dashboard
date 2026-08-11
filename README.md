@@ -27,13 +27,13 @@ Self-hosted DNS management panel powered by **PowerDNS** — modern web frontend
 ### Option 1: npm (simplest)
 
 ```bash
-npm install -g pdnsdash   # or: npx pdnsdash
-pdnsdash                  # open http://localhost:5001
+npm install -g pdash   # or: npx pdash
+pdash                  # open http://localhost:5001
 ```
 
-On first run it creates `~/.pdnsdash/` and prints the admin password exactly once. Point it at your PowerDNS server from the Settings page after logging in.
+On first run it creates `~/.pdash/` and prints the admin password exactly once. Point it at your PowerDNS server from the Settings page after logging in.
 
-> Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g pdnsdash`. The dashboard stores its data in `~/.pdnsdash` of whichever user runs it (run with `sudo` → `/root/.pdnsdash`).
+> Global install note: if your npm prefix is `/usr` (default on many distros), use `sudo npm i -g pdash`. The dashboard stores its data in `~/.pdash` of whichever user runs it (run with `sudo` → `/root/.pdash`).
 
 ### Option 2: from source
 
@@ -67,7 +67,7 @@ Host the `scripts/bootstrap.sh` file + a release tarball somewhere (GitHub raw, 
 curl -fsSL <URL>/bootstrap.sh | bash
 ```
 
-The script automatically: checks for node — skips if node ≥ 22 is present, otherwise downloads the official build to `~/.local/bin` → extracts the release into `~/.local/share/pdnsdash` → builds the frontend → **seeds `.env` with a random JWT_SECRET + admin password** (printed exactly once) → runs via a systemd **user service** (if available) or nohup. The production backend also serves the built frontend (single port, `SERVE_FRONTEND=true`).
+The script automatically: checks for node — skips if node ≥ 22 is present, otherwise downloads the official build to `~/.local/bin` → extracts the release into `~/.local/share/pdash` → builds the frontend → **seeds `.env` with a random JWT_SECRET + admin password** (printed exactly once) → runs via a systemd **user service** (if available) or nohup. The production backend also serves the built frontend (single port, `SERVE_FRONTEND=true`).
 
 > PowerDNS is installed separately via `backend/scripts/install-pdns.sh` on the nameservers — bootstrap does not touch it. The PowerDNS connection (API URL, key, nameservers, secondaries) is configured from the Settings page after login — stored in the DB, not read from env.
 
