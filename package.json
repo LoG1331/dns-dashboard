@@ -1,11 +1,11 @@
 {
-  "name": "dns-dashboard",
+  "name": "pdnsdash",
   "version": "1.0.0",
   "description": "Self-hosted PowerDNS management panel — web UI + API backend in one package",
   "type": "module",
   "license": "MIT",
   "bin": {
-    "dns-dashboard": "bin/cli.js"
+    "pdnsdash": "bin/cli.js"
   },
   "files": [
     "bin/",
@@ -31,8 +31,5 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/LoG1331/dns-dashboard.git"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
   }
 }

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// DNS Dashboard CLI — runs both the backend and the prebuilt frontend
+// pdnsdash CLI — runs both the backend and the prebuilt frontend
 // in a single process.
 //
-//   npx dns-dashboard            # or after global install: dns-dashboard
-//   dns-dashboard --port 8080 --host 0.0.0.0
+//   npx pdnsdash            # or after global install: pdnsdash
+//   pdnsdash --port 8080 --host 0.0.0.0
 //
-// On first run it creates ~/.dns-dashboard/ (DB + .env with random
+// On first run it creates ~/.local/pdnsdash/ (DB + .env with random
 // secrets) and prints the admin password exactly once.
 import fs from "node:fs";
 import path from "node:path";
@@ -28,16 +28,16 @@ const loadEnv = (file) => {
 // ---------- CLI args ----------
 const args = process.argv.slice(2);
 if (args.includes("--help") || args.includes("-h")) {
-  console.log(`dns-dashboard — self-hosted PowerDNS management panel
+  console.log(`pdnsdash — self-hosted PowerDNS management panel
 
-Usage: dns-dashboard [options]
+Usage: pdnsdash [options]
 
 Options:
   --port <n>     Port to listen on (default 5001)
   --host <addr>  Listen address, IP or 0.0.0.0 (default 0.0.0.0)
   --help         Show this help
 
-Config lives in ~/.dns-dashboard/ (or $DNS_DASHBOARD_HOME).
+Config lives in ~/.local/pdnsdash/ (or $PDNSDASH_HOME).
 PowerDNS connection is configured from the Settings page after login.`);
   process.exit(0);
 }
@@ -48,7 +48,8 @@ const argValue = (flag) => {
 
 // ---------- Data dir + first-run seed ----------
 const dataDir =
-  process.env.DNS_DASHBOARD_HOME || path.join(os.homedir(), ".dns-dashboard");
+  process.env.PDNSDASH_HOME ||
+  path.join(os.homedir(), ".local", "pdnsdash");
 fs.mkdirSync(dataDir, { recursive: true });
 
 const envFile = path.join(dataDir, ".env");
@@ -86,7 +87,7 @@ if (argValue("--host")) process.env.HOST = argValue("--host");
 process.env.FRONTEND_EMBED = "true";
 process.env.DB_FILE = path.join(dataDir, "data.sqlite");
 
-await import(path.join(PKG_ROOT, "bundle", "dns-dashboard.js"));
+await import(path.join(PKG_ROOT, "bundle", "pdnsdash.js"));
 
 if (firstRun) {
   console.log("");
