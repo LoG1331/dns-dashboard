@@ -22,7 +22,7 @@
 set -euo pipefail
 
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/share/dns-dashboard}"
-REPO_URL="${REPO_URL:-https://github.com/CHANGE_ME/dns-dashboard/archive/refs/heads/main.tar.gz}"
+REPO_URL="${REPO_URL:-https://github.com/LoG1331/dns-dashboard/releases/download/v1.0.0/dns-dashboard-v1.0.0.tar.gz}"
 BACKEND_PORT=5001
 NODE_MAJOR=22
 
