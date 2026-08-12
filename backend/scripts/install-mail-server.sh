@@ -72,12 +72,16 @@ export DEBIAN_FRONTEND=noninteractive
 debconf-set-selections <<< "postfix postfix/mailname string $MX_HOSTNAME"
 debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Site'"
 apt-get update -qq
-apt-get install -y -qq postfix python3 curl >/dev/null
+apt-get install -y -qq postfix python3 curl sudo >/dev/null
 
 # ---------- 2. firewall ----------
-iptables -C INPUT -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
-  iptables -I INPUT 5 -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT
-echo "==> TCP/25 opened (iptables). Persist: apt install iptables-persistent && netfilter-persistent save"
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 5 -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT || true
+  echo "==> TCP/25 opened (iptables). Persist: apt install iptables-persistent && netfilter-persistent save"
+else
+  echo "==> No iptables (container?) — remember to open TCP/25 at the cloud firewall"
+fi
 
 # ---------- 3. postfix base config ----------
 postconf -e "myhostname = $MX_HOSTNAME"
@@ -118,15 +122,19 @@ webhook   unix  -       n       n       -       -       pipe
 EOF
 fi
 
-# ---------- 6. mail agent (systemd, non-root user) ----------
-echo "==> Installing $SERVICE..."
+# ---------- 6. mail agent ----------
 # Agent (user zoner) may only run the mail-domain script as root
-echo 'zoner ALL=(root) NOPASSWD: /opt/zoner-mail/mail-domain' > /etc/sudoers.d/zoner-mail
-chmod 440 /etc/sudoers.d/zoner-mail
+if command -v sudo >/dev/null 2>&1; then
+  mkdir -p /etc/sudoers.d
+  echo 'zoner ALL=(root) NOPASSWD: /opt/zoner-mail/mail-domain' > /etc/sudoers.d/zoner-mail
+  chmod 440 /etc/sudoers.d/zoner-mail
+fi
 # Agent needs to read/write the forwarder config
 chown -R zoner:zoner "$OPT"
 
-cat > "/etc/systemd/system/${SERVICE}.service" <<EOF
+if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
+  echo "==> Installing $SERVICE (systemd)..."
+  cat > "/etc/systemd/system/${SERVICE}.service" <<EOF
 [Unit]
 Description=zoner mail agent
 After=network.target postfix.service
@@ -148,12 +156,17 @@ ReadWritePaths=${OPT}
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable --now "$SERVICE"
+  systemctl daemon-reload
+  systemctl enable --now "$SERVICE"
+else
+  echo "==> No systemd — starting agent via nohup"
+  pkill -f mail-agent.py 2>/dev/null || true
+  setsid su -s /bin/bash zoner -c "AGENT_HOST=${AGENT_HOST:-0.0.0.0} AGENT_PORT=${AGENT_PORT} AGENT_TOKEN='${AGENT_TOKEN}' MAIL_CMD=${OPT}/mail-domain python3 ${OPT}/mail-agent.py" >"$OPT/agent.log" 2>&1 &
+fi
 
 # ---------- 7. postfix check + restart ----------
 postfix check
-systemctl restart postfix
+systemctl restart postfix 2>/dev/null || service postfix restart 2>/dev/null || postfix start
 
 echo ""
 echo "============================================================"

@@ -21,13 +21,18 @@ validate() {
 exec 9>"$LOCK"
 flock 9
 
+reload_postfix() {
+  # systemd nếu có, fallback service/sysv (container)
+  systemctl reload postfix 2>/dev/null || service postfix reload 2>/dev/null || postfix reload
+}
+
 sync_postfix() {
   postmap "$FILE"
   local domains
   domains="$(awk '$2=="webhook:" {print $1}' "$FILE" | sort -u | paste -sd, -)"
   postconf -e "relay_domains = $domains"
   postfix check
-  systemctl reload postfix
+  reload_postfix
 }
 
 cmd_add() {
