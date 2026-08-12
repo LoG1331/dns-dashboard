@@ -2,6 +2,7 @@
 //   node scripts/build-bundle.mjs
 // Output: bundle/zoner.js (no node_modules needed at runtime)
 import * as esbuild from "esbuild";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,6 +11,15 @@ const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DIST = path.join(ROOT, "frontend", "dist");
 const GENERATED = path.join(ROOT, "backend", "src", "frontend-files.js");
 const OUT = path.join(ROOT, "bundle");
+
+// 0. Always rebuild the frontend with the same-origin API path — the dev
+// .env points at an absolute URL which would break package installs.
+console.log("Building frontend (VITE_API_URL=/api)...");
+execSync("npm run build", {
+  cwd: path.join(ROOT, "frontend"),
+  stdio: "inherit",
+  env: { ...process.env, VITE_API_URL: "/api", VITE_ENABLE_TURNSTILE: "false" },
+});
 
 if (!fs.existsSync(path.join(DIST, "index.html"))) {
   console.error("frontend/dist chưa build — chạy: cd frontend && npm run build");
