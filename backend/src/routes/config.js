@@ -6,6 +6,32 @@ import { getStatistics } from "../pdns.js";
 const router = Router();
 router.use(requireAuth);
 
+const MASK = "••••••••";
+
+// Return a copy of cfg with secrets masked for API responses
+function maskConfig(cfg) {
+  const masked = {
+    ...cfg,
+    pdnsApiKey: cfg.pdnsApiKey ? MASK : "",
+    mailAgentToken: cfg.mailAgentToken ? MASK : "",
+  };
+  try {
+    const list = JSON.parse(cfg.secondaries);
+    if (Array.isArray(list)) {
+      masked.secondaries = JSON.stringify(
+        list.map((s) => ({ ...s, apiKey: s.apiKey ? MASK : "" }))
+      );
+    }
+  } catch {
+    // leave secondaries as-is if it is not valid JSON
+  }
+  masked.secondaryList = (cfg.secondaryList || []).map((s) => ({
+    ...s,
+    apiKey: s.apiKey ? MASK : "",
+  }));
+  return masked;
+}
+
 // GET /config — returns current config + PowerDNS connection status
 router.get("/", async (_req, res) => {
   const cfg = getConfig();
@@ -21,12 +47,16 @@ router.get("/", async (_req, res) => {
   } catch {
     pdnsConnected = false;
   }
-  res.json({ ...cfg, pdnsConnected });
+  res.json({ ...maskConfig(cfg), pdnsConnected });
 });
 
 // PUT /config — update config
 router.put("/", (req, res) => {
-  const { pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailAgentUrl, mailAgentToken } = req.body || {};
+  const { pdnsApiUrl, pdnsApiKey: rawPdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries: rawSecondaries, mxHost, mailAgentUrl, mailAgentToken: rawMailAgentToken } = req.body || {};
+  // masked secrets mean "keep the current value"
+  const pdnsApiKey = rawPdnsApiKey === MASK ? undefined : rawPdnsApiKey;
+  const mailAgentToken = rawMailAgentToken === MASK ? undefined : rawMailAgentToken;
+  let secondaries = rawSecondaries;
   if (zoneKind !== undefined && !["Native", "Master", "Slave"].includes(zoneKind))
     return res.status(400).json({ error: "zoneKind must be Native, Master or Slave" });
   if (pdnsApiUrl !== undefined && pdnsApiUrl) {
@@ -40,9 +70,17 @@ router.put("/", (req, res) => {
     try {
       const list = JSON.parse(secondaries);
       if (!Array.isArray(list)) throw new Error();
+      // entries with an empty or masked apiKey keep the key of the existing
+      // entry with the same name + apiUrl
+      const oldByKey = new Map(
+        getConfig().secondaryList.map((s) => [`${s.name}|${s.apiUrl}`, s.apiKey])
+      );
       for (const s of list) {
+        if (!s.apiKey || s.apiKey === MASK)
+          s.apiKey = oldByKey.get(`${s.name}|${s.apiUrl}`) || "";
         if (!s.apiUrl || !s.apiKey) throw new Error();
       }
+      secondaries = JSON.stringify(list);
     } catch {
       return res.status(400).json({
         error: "Secondaries must be a JSON array like [{ name, apiUrl, apiKey }]",
@@ -50,7 +88,7 @@ router.put("/", (req, res) => {
     }
   }
   const cfg = updateConfig({ pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailAgentUrl, mailAgentToken });
-  res.json({ message: "Config saved", ...cfg });
+  res.json({ message: "Config saved", ...maskConfig(cfg) });
 });
 
 export default router;

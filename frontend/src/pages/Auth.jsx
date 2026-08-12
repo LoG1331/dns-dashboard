@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, ArrowRight, Loader2, Eye, EyeOff, X } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Eye, EyeOff, X } from 'lucide-react';
 import { Turnstile } from '@marsidev/react-turnstile';
 import api from '../services/api';
 
@@ -14,7 +14,7 @@ const Auth = () => {
     const [error, setError] = useState("");
 
     // Form State
-    const [email, setEmail] = useState("");
+    const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
 
     const [turnstileToken, setTurnstileToken] = useState("");
@@ -28,7 +28,7 @@ const Auth = () => {
         setLoading(true);
         setError("");
         try {
-            const res = await api.post('/auth/login', { email, password });
+            const res = await api.post('/auth/login', { username, password });
             localStorage.setItem('token', res.data.token);
             navigate('/dashboard');
         } catch (err) {
@@ -65,8 +65,8 @@ const Auth = () => {
                 )}
 
                 <form onSubmit={handleLogin} className="space-y-4">
-                    <InputGroup label="Email" icon={Mail} type="email" value={email} onChange={setEmail} placeholder="admin@example.com" />
-                    <InputGroup label="Password" icon={Lock} type="password" value={password} onChange={setPassword} placeholder="••••••••" />
+                    <InputGroup label="Username" icon={User} type="text" value={username} onChange={setUsername} placeholder="admin" autoComplete="username" />
+                    <InputGroup label="Password" icon={Lock} type="password" value={password} onChange={setPassword} placeholder="••••••••" autoComplete="current-password" />
 
                     {enableTurnstile && (
                         <div className="flex justify-center my-4">
@@ -84,7 +84,7 @@ const Auth = () => {
     );
 };
 
-const InputGroup = ({ label, icon: Icon, type, value, onChange, placeholder, error }) => {
+const InputGroup = ({ label, icon: Icon, type, value, onChange, placeholder, autoComplete, error }) => {
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === 'password';
     const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
@@ -99,6 +99,7 @@ const InputGroup = ({ label, icon: Icon, type, value, onChange, placeholder, err
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                     placeholder={placeholder}
+                    autoComplete={autoComplete}
                     className={`w-full bg-[#1A1A1A] border rounded-xl py-2.5 pl-10 pr-10 focus:outline-none focus:ring-1 transition-all placeholder-[#444] text-white ${
                         error
                             ? 'border-red-500 focus:border-red-500 focus:ring-red-500'

@@ -11,6 +11,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     email TEXT UNIQUE NOT NULL,
+    username TEXT UNIQUE,
     name TEXT NOT NULL,
     password_hash TEXT,
     verified INTEGER DEFAULT 0,
@@ -43,6 +44,16 @@ db.exec(`
   );
 `);
 
+// Migration: add username column to existing users tables
+try {
+  db.exec("ALTER TABLE users ADD COLUMN username TEXT");
+} catch {
+  // column already exists
+}
+db.exec(
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users (username)"
+);
+
 // ---------- templates ----------
 export const templatesAll = db.prepare(
   "SELECT * FROM templates ORDER BY created_at DESC"
@@ -68,32 +79,42 @@ export const setSetting = (key, value) => setSettingStmt.run(key, value);
 
 // ---------- users ----------
 export const userByEmail = db.prepare("SELECT * FROM users WHERE email = ?");
+export const userByUsername = db.prepare(
+  "SELECT * FROM users WHERE username = ?"
+);
 export const userById = db.prepare("SELECT * FROM users WHERE id = ?");
 export const firstUser = db.prepare("SELECT * FROM users ORDER BY id LIMIT 1");
 export const insertUser = db.prepare(
-  "INSERT INTO users (email, name, password_hash, verified) VALUES (?, ?, ?, ?)"
+  "INSERT INTO users (email, username, name, password_hash, verified) VALUES (?, ?, ?, ?, ?)"
 );
 export const updatePassword = db.prepare(
   "UPDATE users SET password_hash = ? WHERE id = ?"
 );
 export const updateProfile = db.prepare(
-  "UPDATE users SET name = ?, email = ? WHERE id = ?"
+  "UPDATE users SET name = ?, username = ? WHERE id = ?"
 );
 
 // ---------- seed admin (single account) ----------
 const countUsers = db.prepare("SELECT COUNT(*) AS n FROM users");
+const missingUsername = db.prepare(
+  "SELECT id FROM users WHERE username IS NULL OR username = ''"
+);
+const setUsername = db.prepare("UPDATE users SET username = ? WHERE id = ?");
 export function seedAdmin(hashPasswordFn) {
-  const email = (process.env.ADMIN_EMAIL || "").toLowerCase();
+  const username = process.env.ADMIN_USERNAME || "admin";
   const password = process.env.ADMIN_PASSWORD || "";
   const name = process.env.ADMIN_NAME || "Admin";
-  if (!email || !password) {
-    console.warn("[seed] ADMIN_EMAIL/ADMIN_PASSWORD not configured — no account created");
+  if (!username || !password) {
+    console.warn("[seed] ADMIN_USERNAME/ADMIN_PASSWORD not configured — no account created");
     return;
   }
-  // Only create when no account exists — admin changing email won't trigger re-seed
+  // Only create when no account exists — admin changing username won't trigger re-seed
   if (countUsers.get().n === 0) {
-    insertUser.run(email, name, hashPasswordFn(password), 1);
-    console.log(`[seed] Created admin account: ${email}`);
+    insertUser.run(`${username}@local`, username, name, hashPasswordFn(password), 1);
+    console.log(`[seed] Created admin account: ${username}`);
+  } else {
+    // Backfill username for rows created before the migration
+    for (const row of missingUsername.all()) setUsername.run(username, row.id);
   }
 }
 
