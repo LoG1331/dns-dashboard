@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
-# zoner mail agent — tiny HTTP API on the mail server that wraps the
-# mail-domain script. The zoner dashboard talks to it remotely.
+# zoner mail agent — tiny HTTP API on the mail server that manages the
+# Haraka host_list (accepted domains) and the webhook forwarder config.
+# The zoner dashboard talks to it remotely.
 #
-# Security model: the dashboard can manage mail domains and the webhook
-# forwarder config, but it can NEVER set an arbitrary command — only pick
-# a pre-installed handler from the handlers dir (managed by root locally).
+# Security model: everything runs as an unprivileged user — no root, no
+# sudo. The dashboard can manage mail domains and the webhook forwarder
+# config, but it can NEVER set an arbitrary command — only pick a
+# pre-installed handler from the handlers dir (managed locally).
 #
 # Env:
 #   AGENT_HOST     (default 0.0.0.0 — bind a private IP + firewall instead!)
 #   AGENT_PORT     (default 9099)
 #   AGENT_TOKEN    (required — Bearer token)
-#   MAIL_CMD       (default /opt/zoner-mail/mail-domain; called via sudo -n
-#                   when the agent runs as non-root)
+#   HOST_LIST      (default /opt/zoner-mail/haraka/config/host_list;
+#                   the Haraka webhook plugin reads it on every RCPT,
+#                   so edits take effect immediately)
 #   FORWARDER_CONFIG (default /opt/zoner-mail/mail-forwarder.json)
 #   HANDLERS_DIR   (default /opt/zoner-mail/handlers)
 
 import json
 import os
 import re
-import subprocess
 import sys
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOST = os.environ.get("AGENT_HOST", "0.0.0.0")
 PORT = int(os.environ.get("AGENT_PORT", "9099"))
 TOKEN = os.environ.get("AGENT_TOKEN", "")
-MAIL_CMD = os.environ.get("MAIL_CMD", "/opt/zoner-mail/mail-domain")
+HOST_LIST = os.environ.get("HOST_LIST", "/opt/zoner-mail/haraka/config/host_list")
 FORWARDER_CONFIG = os.environ.get(
     "FORWARDER_CONFIG", "/opt/zoner-mail/mail-forwarder.json"
 )
@@ -37,21 +40,42 @@ if not TOKEN:
     print("AGENT_TOKEN is required", file=sys.stderr)
     sys.exit(1)
 
-# Non-root agent → mail-domain needs sudo (sudoers NOPASSWD on that exact path)
-MAIL_PREFIX = [] if os.geteuid() == 0 else ["sudo", "-n"]
+# host_list writes are serialized (ThreadingHTTPServer)
+_lock = threading.Lock()
 
 
-def run_mail_domain(args):
-    # execFile-style: no shell, args passed as a list
-    proc = subprocess.run(
-        [*MAIL_PREFIX, MAIL_CMD, *args],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
-    if proc.returncode != 0:
-        raise RuntimeError((proc.stderr or proc.stdout or "command failed").strip())
-    return proc.stdout.strip()
+def list_domains():
+    try:
+        with open(HOST_LIST, encoding="utf-8") as f:
+            return sorted({
+                line.strip().lower()
+                for line in f
+                if line.strip() and not line.startswith("#")
+            })
+    except FileNotFoundError:
+        return []
+
+
+def add_domain(domain):
+    with _lock:
+        domains = list_domains()
+        if domain in domains:
+            return False
+        with open(HOST_LIST, "a", encoding="utf-8") as f:
+            f.write(domain + "\n")
+        return True
+
+
+def remove_domain(domain):
+    with _lock:
+        domains = list_domains()
+        if domain not in domains:
+            return False
+        remaining = [d for d in domains if d != domain]
+        with open(HOST_LIST, "w", encoding="utf-8") as f:
+            for d in remaining:
+                f.write(d + "\n")
+        return True
 
 
 def list_handlers():
@@ -106,12 +130,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._auth_ok():
             return self._json(401, {"error": "Unauthorized"})
         if self.path == "/domains":
-            try:
-                out = run_mail_domain(["list"])
-                domains = [d for d in out.split("\n") if d] if out else []
-                return self._json(200, {"domains": domains})
-            except Exception as e:
-                return self._json(500, {"error": str(e)})
+            return self._json(200, {"domains": list_domains()})
         if self.path == "/handlers":
             return self._json(200, {"handlers": list_handlers()})
         if self.path == "/forwarder":
@@ -130,10 +149,10 @@ class Handler(BaseHTTPRequestHandler):
             domain = self._domain(self._read_json().get("domain"))
             if not domain:
                 return self._json(400, {"error": "Invalid domain name"})
-            run_mail_domain(["add", domain])
+            add_domain(domain)
             return self._json(201, {"message": "Mail domain added"})
-        except RuntimeError as e:
-            return self._json(500, {"error": str(e)})
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
         except Exception:
             return self._json(400, {"error": "Bad request"})
 
@@ -182,11 +201,9 @@ class Handler(BaseHTTPRequestHandler):
         domain = self._domain(self.path[len(prefix):])
         if not domain:
             return self._json(400, {"error": "Invalid domain name"})
-        try:
-            run_mail_domain(["remove", domain])
+        if remove_domain(domain):
             return self._json(200, {"message": "Mail domain removed"})
-        except RuntimeError as e:
-            return self._json(500, {"error": str(e)})
+        return self._json(404, {"error": "Domain not found"})
 
 
 if __name__ == "__main__":
