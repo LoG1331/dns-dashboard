@@ -23,13 +23,43 @@ set -euo pipefail
 ROLE="${1:-}"
 API_PORT="${PDNS_API_PORT:-8081}"
 
+[[ "$ROLE" != "--uninstall" ]] && [[ $EUID -ne 0 ]] && { echo "Must run as root (sudo)"; exit 1; }
+
+# ---------- uninstall ----------
+if [[ "$ROLE" == "--uninstall" ]]; then
+  echo "==> Removing PowerDNS..."
+  systemctl disable --now pdns 2>/dev/null || pkill pdns_server 2>/dev/null || true
+  apt-get purge -y -qq pdns-server pdns-backend-sqlite3 2>/dev/null || true
+  rm -rf /etc/powerdns
+  # Zone data: recreated from the zoner dashboard via API, so it is removed
+  # here for a clean uninstall. Last copy kept at /var/lib/powerdns.bak-zoner.
+  if [[ -d /var/lib/powerdns ]]; then
+    rm -rf /var/lib/powerdns.bak-zoner
+    mv /var/lib/powerdns /var/lib/powerdns.bak-zoner
+    echo "    zone DB moved to /var/lib/powerdns.bak-zoner (delete it when sure)"
+  fi
+  # Undo the systemd-resolved stub change (only if we made it)
+  if [[ -f /etc/systemd/resolved.conf.d/zz-zoner-no-stub.conf ]]; then
+    rm -f /etc/systemd/resolved.conf.d/zz-zoner-no-stub.conf
+    if [[ -e /etc/resolv.conf.bak-zoner ]]; then
+      cp -a /etc/resolv.conf.bak-zoner /etc/resolv.conf
+      rm -f /etc/resolv.conf.bak-zoner
+      echo "    resolv.conf restored from backup"
+    fi
+    systemctl restart systemd-resolved 2>/dev/null || true
+    echo "    systemd-resolved stub listener re-enabled"
+  fi
+  echo "Removed. Firewall rules (53 + API port) were NOT removed:"
+  echo "  ufw: ufw delete allow 53/udp; ufw delete allow 53/tcp; ufw status numbered"
+  echo "  sqlite3/dnsutils/curl left installed (shared packages)."
+  exit 0
+fi
+
 if [[ "$ROLE" != "master" && "$ROLE" != "slave" ]]; then
-  echo "Usage: sudo bash install-pdns.sh [master|slave]"
+  echo "Usage: sudo bash install-pdns.sh [master|slave|--uninstall]"
   echo "  PEER_IP=<private IP of the other machine> CLIENT_IP=<private IP of the backend> PDNS_API_KEY=<key> bash install-pdns.sh master|slave"
   exit 1
 fi
-
-[[ $EUID -ne 0 ]] && { echo "Must run as root (sudo)"; exit 1; }
 
 # ---------- 0. Input ----------
 if [[ -z "${PEER_IP:-}" ]]; then
@@ -64,15 +94,18 @@ apt-get install -y -qq pdns-server pdns-backend-sqlite3 sqlite3 dnsutils curl >/
 echo "==> Writing /etc/powerdns/pdns.conf"
 mkdir -p /var/lib/powerdns
 
+# NOTE: pdns 4.8 (Ubuntu 24.04) accepts exactly ONE webserver-address —
+# no comma list. Bind the private IP; MY_IP is in allow-from so the
+# health check below can curl the API from this machine itself.
 COMMON=$(cat <<EOF
 launch=gsqlite3
 gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
 api=yes
 api-key=${PDNS_API_KEY}
 webserver=yes
-webserver-address=127.0.0.1,${MY_IP}
+webserver-address=${MY_IP}
 webserver-port=${API_PORT}
-webserver-allow-from=127.0.0.0/8,${PEER_IP},${CLIENT_IP}
+webserver-allow-from=127.0.0.0/8,${MY_IP},${PEER_IP},${CLIENT_IP}
 local-address=0.0.0.0
 EOF
 )
@@ -125,7 +158,9 @@ if command -v systemctl >/dev/null && systemctl is-active --quiet systemd-resolv
 fi
 
 # ---------- 4. Run (systemd if available, fallback to direct run) ----------
-if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
+# /run/systemd/system exists iff systemd is PID 1 — unlike `is-system-running`,
+# this is also true in "degraded" state (containers, a failed unit, ...).
+if command -v systemctl >/dev/null && [[ -d /run/systemd/system ]]; then
   systemctl enable pdns >/dev/null 2>&1 || true
   systemctl restart pdns
   echo "==> pdns started via systemd (systemctl status pdns)"
@@ -162,7 +197,7 @@ fi
 
 # ---------- 6. Wait for API ----------
 for i in $(seq 1 20); do
-  curl -sf -H "X-API-Key: ${PDNS_API_KEY}" "http://127.0.0.1:${API_PORT}/api/v1/servers/localhost" >/dev/null 2>&1 && break
+  curl -sf -H "X-API-Key: ${PDNS_API_KEY}" "http://${MY_IP}:${API_PORT}/api/v1/servers/localhost" >/dev/null 2>&1 && break
   sleep 2
 done
 
