@@ -60,14 +60,15 @@ BACKEND_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "==> Seeding backend config (backend/data.sqlite)"
 ( cd "$BACKEND_DIR" && node --input-type=module -e "
-import { setSetting } from './src/db.js';
-setSetting('pdnsApiUrl', 'http://127.0.0.1:8081');
-setSetting('pdnsApiKey', '$API_KEY');
-setSetting('zoneKind', 'Master');
-setSetting('ns1', '$BASE_DOMAIN_NS1');
-setSetting('ns2', '$BASE_DOMAIN_NS2');
-setSetting('masterAddress', '$NS1_IP');
-setSetting('secondaries', JSON.stringify([{ name: 'ns2', apiUrl: 'http://127.0.0.1:8082', apiKey: '$API_KEY' }]));
+import { updateConfig } from './src/config.js';
+updateConfig({
+  pdnsApiUrl: 'http://127.0.0.1:8081',
+  pdnsApiKey: '$API_KEY',
+  zoneKind: 'Master',
+  nameservers: JSON.stringify(['$BASE_DOMAIN_NS1']),
+  secondaries: JSON.stringify([{ name: 'ns2', apiUrl: 'http://127.0.0.1:8082', apiKey: '$API_KEY', ns: '$BASE_DOMAIN_NS2' }]),
+  masterAddress: '$NS1_IP',
+});
 console.log('config seeded');
 " )
 

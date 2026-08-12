@@ -13,7 +13,8 @@ const Settings = () => {
     const [profileMessage, setProfileMessage] = useState({ type: '', text: '' });
 
     // PowerDNS Config State
-    const [config, setConfig] = useState({ pdnsApiUrl: '', pdnsApiKey: '', pdnsServerId: '', zoneKind: 'Native', ns1: '', ns2: '', masterAddress: '', secondaries: '[]', pdnsConnected: false });
+    const [config, setConfig] = useState({ pdnsApiUrl: '', pdnsApiKey: '', pdnsServerId: '', zoneKind: 'Native', pdnsConnected: false });
+    const [nameserver, setNameserver] = useState(''); // primary NS hostname (single)
     const [secondaries, setSecondaries] = useState([]);
 
     const [configLoading, setConfigLoading] = useState(false);
@@ -33,6 +34,7 @@ const Settings = () => {
         try {
             const res = await api.get('/config');
             setConfig(res.data);
+            setNameserver((res.data.nameserverList || [])[0] || '');
             // GET /config returns secondaryList with apiKey masked — keep as-is,
             // an unchanged masked value means "keep the old key" on save
             setSecondaries(
@@ -40,6 +42,7 @@ const Settings = () => {
                     name: s.name || '',
                     apiUrl: s.apiUrl || '',
                     apiKey: s.apiKey || '',
+                    ns: s.ns || '',
                 }))
             );
         } catch (error) {
@@ -47,7 +50,11 @@ const Settings = () => {
         }
     };
 
-    const addSecondary = () => setSecondaries([...secondaries, { name: '', apiUrl: '', apiKey: '' }]);
+    const addSecondary = () => {
+        // suggest nsN.<domain of the primary NS>
+        const base = (nameserver.split('.').slice(1).join('.')) || 'example.com';
+        setSecondaries([...secondaries, { name: '', apiUrl: '', apiKey: '', ns: `ns${secondaries.length + 2}.${base}` }]);
+    };
     const removeSecondary = (index) => setSecondaries(secondaries.filter((_, i) => i !== index));
     const updateSecondary = (index, field, value) =>
         setSecondaries(secondaries.map((s, i) => (i === index ? { ...s, [field]: value } : s)));
@@ -59,10 +66,10 @@ const Settings = () => {
             setConfigLoading(true);
             // Skip fully empty rows; a partially filled row is an error
             const secondaryList = secondaries
-                .map(s => ({ name: (s.name || '').trim(), apiUrl: (s.apiUrl || '').trim(), apiKey: s.apiKey }))
-                .filter(s => s.name || s.apiUrl || s.apiKey);
-            if (secondaryList.some(s => !s.apiUrl || !s.apiKey)) {
-                setConfigMessage({ type: 'error', text: 'Each secondary needs all of: name, apiUrl, apiKey' });
+                .map(s => ({ name: (s.name || '').trim(), apiUrl: (s.apiUrl || '').trim(), apiKey: s.apiKey, ns: (s.ns || '').trim() }))
+                .filter(s => s.name || s.apiUrl || s.apiKey || s.ns);
+            if (secondaryList.some(s => !s.apiUrl || !s.apiKey || !s.ns)) {
+                setConfigMessage({ type: 'error', text: 'Each secondary needs all of: name, apiUrl, apiKey, ns' });
                 setConfigLoading(false);
                 return;
             }
@@ -71,9 +78,7 @@ const Settings = () => {
                 pdnsApiKey: config.pdnsApiKey,
                 pdnsServerId: config.pdnsServerId,
                 zoneKind: config.zoneKind,
-                ns1: config.ns1,
-                ns2: config.ns2,
-                masterAddress: config.masterAddress,
+                nameservers: [nameserver.trim()].filter(Boolean),
                 secondaries: JSON.stringify(secondaryList)
             });
             setConfigMessage({ type: 'success', text: 'Configuration saved' });
@@ -339,59 +344,38 @@ const Settings = () => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                                <Globe className="w-3 h-3" /> Nameserver 1
-                            </label>
-                            <input
-                                type="text"
-                                value={config.ns1}
-                                onChange={(e) => setConfig({ ...config, ns1: e.target.value })}
-                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                                placeholder="ns1.example.com"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
-                                <Globe className="w-3 h-3" /> Nameserver 2
-                            </label>
-                            <input
-                                type="text"
-                                value={config.ns2}
-                                onChange={(e) => setConfig({ ...config, ns2: e.target.value })}
-                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                                placeholder="ns2.example.com"
-                            />
-                        </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide flex items-center gap-1">
+                            <Globe className="w-3 h-3" /> Nameserver (primary)
+                        </label>
+                        <input
+                            type="text"
+                            value={nameserver}
+                            onChange={(e) => setNameserver(e.target.value)}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                            placeholder="ns1.example.com"
+                        />
+                        <p className="text-gray-500 text-xs">
+                            Only one NS by default — adding a secondary below adds ns2, ns3... automatically.
+                        </p>
                     </div>
 
                     {/* Secondary (slave) servers */}
                     <div className="border-t border-white/5 pt-4 space-y-4">
-                        <div className="space-y-1.5 max-w-md">
-                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Master Address (secondaries AXFR from this address)</label>
-                            <input
-                                type="text"
-                                value={config.masterAddress}
-                                onChange={(e) => setConfig({ ...config, masterAddress: e.target.value })}
-                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                                placeholder="10.89.0.2"
-                            />
-                        </div>
                         <div className="space-y-1.5">
                             <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Secondary Servers (slave)</label>
                             <p className="text-gray-500 text-xs">
-                                Zones created/deleted on the master will automatically create/delete slave zones on these servers. Leave the API key untouched (<code className="text-[#38BDF8] font-mono">••••••••</code>) to keep the current key.
+                                Zones created/deleted on the master are automatically created/deleted on these servers. The master address used for AXFR is derived from the API URL automatically. Leave the API key untouched (<code className="text-[#38BDF8] font-mono">••••••••</code>) to keep the current key.
                             </p>
                             <div className="space-y-2">
                                 {secondaries.map((sec, index) => (
-                                    <div key={index} className="flex items-center gap-2">
+                                    <div key={index} className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr_1fr_1.2fr_auto] gap-2 items-center">
                                         <input
                                             type="text"
                                             value={sec.name}
                                             onChange={(e) => updateSecondary(index, 'name', e.target.value)}
                                             className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                                            placeholder="ns2"
+                                            placeholder={`ns${index + 2} (name)`}
                                         />
                                         <input
                                             type="text"
@@ -405,12 +389,19 @@ const Settings = () => {
                                             value={sec.apiKey}
                                             onChange={(e) => updateSecondary(index, 'apiKey', e.target.value)}
                                             className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                                            placeholder="••••••••"
+                                            placeholder="API key"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={sec.ns}
+                                            onChange={(e) => updateSecondary(index, 'ns', e.target.value)}
+                                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                                            placeholder={`ns${index + 2}.example.com`}
                                         />
                                         <button
                                             type="button"
                                             onClick={() => removeSecondary(index)}
-                                            className="p-2.5 rounded-xl border border-white/10 text-gray-500 hover:text-red-400 hover:border-red-500/30 transition-all"
+                                            className="p-2.5 rounded-xl border border-white/10 text-gray-500 hover:text-red-400 hover:border-red-500/30 transition-all justify-self-end"
                                             title="Remove secondary"
                                         >
                                             <Trash2 className="w-4 h-4" />

@@ -52,13 +52,17 @@ router.get("/", async (_req, res) => {
 
 // PUT /config — update config
 router.put("/", (req, res) => {
-  const { pdnsApiUrl, pdnsApiKey: rawPdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries: rawSecondaries, mxHost, mailAgentUrl, mailAgentToken: rawMailAgentToken } = req.body || {};
+  const { pdnsApiUrl, pdnsApiKey: rawPdnsApiKey, pdnsServerId, zoneKind, nameservers, secondaries: rawSecondaries, mxHost, mailAgentUrl, mailAgentToken: rawMailAgentToken } = req.body || {};
   // masked secrets mean "keep the current value"
   const pdnsApiKey = rawPdnsApiKey === MASK ? undefined : rawPdnsApiKey;
   const mailAgentToken = rawMailAgentToken === MASK ? undefined : rawMailAgentToken;
   let secondaries = rawSecondaries;
   if (zoneKind !== undefined && !["Native", "Master", "Slave"].includes(zoneKind))
     return res.status(400).json({ error: "zoneKind must be Native, Master or Slave" });
+  if (nameservers !== undefined) {
+    if (!Array.isArray(nameservers) || nameservers.length === 0 || nameservers.some((n) => typeof n !== "string" || !n.trim()))
+      return res.status(400).json({ error: "nameservers must be a non-empty array of hostnames" });
+  }
   if (pdnsApiUrl !== undefined && pdnsApiUrl) {
     try {
       new URL(pdnsApiUrl);
@@ -79,6 +83,7 @@ router.put("/", (req, res) => {
         if (!s.apiKey || s.apiKey === MASK)
           s.apiKey = oldByKey.get(`${s.name}|${s.apiUrl}`) || "";
         if (!s.apiUrl || !s.apiKey) throw new Error();
+        if (!s.ns) s.ns = `ns${list.indexOf(s) + 2}.example.com`;
       }
       secondaries = JSON.stringify(list);
     } catch {
@@ -87,7 +92,11 @@ router.put("/", (req, res) => {
       });
     }
   }
-  const cfg = updateConfig({ pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind, ns1, ns2, masterAddress, secondaries, mxHost, mailAgentUrl, mailAgentToken });
+  const cfg = updateConfig({
+    pdnsApiUrl, pdnsApiKey, pdnsServerId, zoneKind,
+    nameservers: nameservers === undefined ? undefined : JSON.stringify(nameservers.map((n) => n.trim())),
+    secondaries, mxHost, mailAgentUrl, mailAgentToken,
+  });
   res.json({ message: "Config saved", ...maskConfig(cfg) });
 });
 

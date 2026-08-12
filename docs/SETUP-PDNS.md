@@ -78,25 +78,19 @@ bash scripts/setup-pdns.sh --clean  # wipes everything
 5. Initialize the sqlite schema: `sqlite3 /var/lib/powerdns/pdns.sqlite3 < /usr/share/pdns-backend-sqlite3/schema/schema.sqlite3.sql`
 6. Run directly (containers have no systemd): `podman exec -d <ns> bash -c 'pdns_server --daemon=no'`
 7. Wait for the API on both ports to be ready
-8. **Automatically writes config into `backend/.env`** (enough for the backend to use immediately, no manual edits needed):
-   - `PDNS_API_URL` / `PDNS_API_KEY` / `ZONE_KIND=Master` / `NS1` / `NS2`
-   - `PDNS_MASTER_ADDRESS=<ns1 LAN IP>` (fetched dynamically from podman inspect)
-   - `PDNS_SECONDARIES=[{"name":"ns2","apiUrl":"http://127.0.0.1:8082","apiKey":...}]`
+8. **Automatically seeds the backend config into the DB** (enough for the backend to use immediately, no manual edits needed) — API URL/key, `zoneKind=Master`, primary nameserver, secondary entry for ns2 (API + NS hostname), master address
 
-> Note: values in the DB (saved via Settings) override env — delete `data.sqlite` if you want to go back to the script-provided config.
+> Note: all of this lives in the DB (Settings page) — delete `data.sqlite` if you want a clean slate.
 
 ## 3. Connecting the dashboard backend
 
-`backend/.env`:
-```ini
-PDNS_API_URL=http://127.0.0.1:8081
-PDNS_API_KEY=e2e-secret-key
-ZONE_KIND=Master        # Native does NOT replicate — Master is required for master/slave
-NS1=ns1.dnstest.local
-NS2=ns2.dnstest.local
-```
+PowerDNS config is **stored in the DB and edited from the Settings page** (not env):
 
-`ZONE_KIND` is a newly added env var (`pdns.js`): zones created through the dashboard get this kind. Use `Master` when you have secondaries, `Native` for standalone operation.
+- **Primary Server**: API URL, API Key, Server ID (usually `localhost`), Zone Kind (`Master` when you have secondaries — `Native` does NOT replicate), and **one Nameserver** hostname by default
+- **Secondary Servers**: one row per secondary — name, API URL, API key, and its NS hostname; adding a secondary automatically adds ns2/ns3... to new zones
+- The **master address** secondaries use for AXFR is derived automatically from the API URL host (a legacy `masterAddress` DB override is still honored)
+
+`setup-pdns.sh` seeds all of this straight into the DB, so a fresh local test needs no manual edits.
 
 ## 4. Replication ns1 → ns2: mechanism & caveats
 

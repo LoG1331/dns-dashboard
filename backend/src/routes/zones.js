@@ -28,7 +28,16 @@ router.use(requireAuth);
 
 // Nameservers resolved dynamically from config (DB overrides env)
 import { getConfig } from "../config.js";
-const NAMESERVERS = () => getConfig().nameservers;
+// Nameservers: primary NS list + NS hostname of each secondary
+const NAMESERVERS = () => {
+  const cfg = getConfig();
+  return [
+    ...cfg.nameservers,
+    ...cfg.secondaryList.map((s) =>
+      s.ns.endsWith(".") ? s.ns : `${s.ns}.`
+    ),
+  ];
+};
 
 const ALLOWED_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA"];
 const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/i;

@@ -79,7 +79,10 @@ const ZoneDetails = () => {
         fetchZoneMetadata();
         fetchRecords(''); // Initial load
         api.get('/config')
-            .then(res => setNameservers([res.data.ns1, res.data.ns2].filter(Boolean)))
+            .then(res => setNameservers([
+                ...(res.data.nameserverList || []),
+                ...(res.data.secondaryList || []).map(s => s.ns).filter(Boolean),
+            ]))
             .catch(() => {});
     }, [id]);
 
