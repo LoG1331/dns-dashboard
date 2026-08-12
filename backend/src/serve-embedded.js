@@ -17,7 +17,11 @@ const MIME = {
  * @param {Record<string, string>} files - path -> base64 content
  */
 export function serveEmbedded(app, files) {
-  app.get("*", (req, res) => {
+  // app.use instead of app.get("*") — the "*" wildcard throws on Express 5
+  // (path-to-regexp v8); a plain middleware works on both Express 4 and 5.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+
     const p = req.path === "/" ? "/index.html" : req.path;
     let b64 = files[p];
     let ext = p.includes(".") ? p.slice(p.lastIndexOf(".")) : "";
@@ -28,7 +32,10 @@ export function serveEmbedded(app, files) {
     }
     if (!b64) return res.status(404).end();
     res.setHeader("Content-Type", MIME[ext] || "application/octet-stream");
-    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader(
+      "Cache-Control",
+      ext === ".html" ? "no-cache" : "public, max-age=3600"
+    );
     res.send(Buffer.from(b64, "base64"));
   });
 }
