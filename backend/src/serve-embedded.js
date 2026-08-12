@@ -19,9 +19,14 @@ const MIME = {
 export function serveEmbedded(app, files) {
   app.get("*", (req, res) => {
     const p = req.path === "/" ? "/index.html" : req.path;
-    const b64 = files[p] ?? files["/index.html"]; // SPA fallback
+    let b64 = files[p];
+    let ext = p.includes(".") ? p.slice(p.lastIndexOf(".")) : "";
+    if (!b64) {
+      // SPA fallback — always serve the app shell as HTML
+      b64 = files["/index.html"];
+      ext = ".html";
+    }
     if (!b64) return res.status(404).end();
-    const ext = p.slice(p.lastIndexOf("."));
     res.setHeader("Content-Type", MIME[ext] || "application/octet-stream");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.send(Buffer.from(b64, "base64"));
