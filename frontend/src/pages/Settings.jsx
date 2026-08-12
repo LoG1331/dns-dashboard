@@ -172,39 +172,41 @@ const Settings = () => {
                     <User className="w-5 h-5 text-[#38BDF8]" /> Profile Information
                 </h2>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
                     {/* Left: profile */}
-                    <form onSubmit={handleUpdateProfile}>
-                        <div className="grid grid-cols-1 gap-6">
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Full Name</label>
-                                <div className="flex items-center gap-3 bg-black/20 rounded-xl border border-white/5 focus-within:border-[#38BDF8] transition-all">
-                                    <User className="w-5 h-5 text-gray-500 ml-3" />
-                                    <input
-                                        type="text"
-                                        value={profile.name}
-                                        onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                                        className="w-full bg-transparent p-3 pl-0 text-gray-300 focus:outline-none"
-                                    />
-                                </div>
-                            </div>
+                    <form onSubmit={handleUpdateProfile} className="space-y-4">
+                        <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+                            <User className="w-4 h-4 text-[#38BDF8]" /> Profile
+                        </h3>
 
-                            <div className="space-y-2">
-                                <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Username</label>
-                                <div className="flex items-center gap-3 bg-black/20 rounded-xl border border-white/5 focus-within:border-[#38BDF8] transition-all">
-                                    <User className="w-5 h-5 text-gray-500 ml-3" />
-                                    <input
-                                        type="text"
-                                        value={profile.username}
-                                        onChange={(e) => setProfile({ ...profile, username: e.target.value })}
-                                        className="w-full bg-transparent p-3 pl-0 text-gray-300 focus:outline-none"
-                                    />
-                                </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Full Name</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                <input
+                                    type="text"
+                                    value={profile.name}
+                                    onChange={(e) => setProfile({ ...profile, name: e.target.value })}
+                                    className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Username</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                                <input
+                                    type="text"
+                                    value={profile.username}
+                                    onChange={(e) => setProfile({ ...profile, username: e.target.value })}
+                                    className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600"
+                                />
                             </div>
                         </div>
 
                         {profileMessage.text && (
-                            <div className={`mt-4 p-3 rounded-lg flex items-center gap-2 text-sm ${profileMessage.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                            <div className={`p-3 rounded-lg flex items-center gap-2 text-sm ${profileMessage.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
                                 }`}>
                                 {profileMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
                                 {profileMessage.text}
@@ -214,7 +216,7 @@ const Settings = () => {
                         <button
                             type="submit"
                             disabled={profileLoading}
-                            className="mt-6 bg-[#38BDF8] hover:bg-[#0EA5E9] text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(56,189,248,0.2)] disabled:opacity-50"
+                            className="bg-[#38BDF8] hover:bg-[#0EA5E9] text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(56,189,248,0.2)] disabled:opacity-50"
                         >
                             {profileLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                             Save Profile
