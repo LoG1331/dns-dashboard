@@ -12,10 +12,11 @@
 # Environment variables (optional):
 #   PDNS_API_KEY   — API key (default: auto-generated randomly and PRINTED)
 #   PEER_IP        — private IP of the other machine (default: asked at runtime)
+#   CLIENT_IP      — private IP of the backend/dashboard machine (default: asked at runtime)
 #   PDNS_API_PORT  — API/webserver port (default 8081)
 #
 # Full example:
-#   sudo PEER_IP=10.0.0.12 PDNS_API_KEY=supersecret bash install-pdns.sh master
+#   sudo PEER_IP=10.0.0.12 CLIENT_IP=10.0.0.5 PDNS_API_KEY=supersecret bash install-pdns.sh master
 # ============================================================
 set -euo pipefail
 
@@ -24,7 +25,7 @@ API_PORT="${PDNS_API_PORT:-8081}"
 
 if [[ "$ROLE" != "master" && "$ROLE" != "slave" ]]; then
   echo "Usage: sudo bash install-pdns.sh [master|slave]"
-  echo "  PEER_IP=<private IP of the other machine> PDNS_API_KEY=<key> bash install-pdns.sh master|slave"
+  echo "  PEER_IP=<private IP of the other machine> CLIENT_IP=<private IP of the backend> PDNS_API_KEY=<key> bash install-pdns.sh master|slave"
   exit 1
 fi
 
@@ -33,6 +34,10 @@ fi
 # ---------- 0. Input ----------
 if [[ -z "${PEER_IP:-}" ]]; then
   read -rp "Private IP of the $([ "$ROLE" = master ] && echo slave || echo master) machine (peer): " PEER_IP
+fi
+
+if [[ -z "${CLIENT_IP:-}" ]]; then
+  read -rp "Private IP of the backend/dashboard machine (API client): " CLIENT_IP
 fi
 
 if [[ -z "${PDNS_API_KEY:-}" ]]; then
@@ -44,9 +49,9 @@ MY_IP=$(hostname -I | awk '{print $1}')
 # Public IP (Oracle/AWS style: VM only sees private IP, public IP held by NAT)
 PUBLIC_IP=$(curl -sf -m 5 https://ifconfig.me 2>/dev/null || curl -sf -m 5 https://api.ipify.org 2>/dev/null || echo "")
 if [[ -n "$PUBLIC_IP" && "$PUBLIC_IP" != "$MY_IP" ]]; then
-  echo "==> Role: $ROLE | private IP: $MY_IP | public IP: $PUBLIC_IP (NAT) | peer: $PEER_IP"
+  echo "==> Role: $ROLE | private IP: $MY_IP | public IP: $PUBLIC_IP (NAT) | peer: $PEER_IP | client: $CLIENT_IP"
 else
-  echo "==> Role: $ROLE | this machine's IP: $MY_IP | peer: $PEER_IP"
+  echo "==> Role: $ROLE | this machine's IP: $MY_IP | peer: $PEER_IP | client: $CLIENT_IP"
 fi
 
 # ---------- 1. Install ----------
@@ -65,9 +70,9 @@ gsqlite3-database=/var/lib/powerdns/pdns.sqlite3
 api=yes
 api-key=${PDNS_API_KEY}
 webserver=yes
-webserver-address=0.0.0.0
+webserver-address=127.0.0.1,${MY_IP}
 webserver-port=${API_PORT}
-webserver-allow-from=0.0.0.0/0
+webserver-allow-from=127.0.0.0/8,${PEER_IP},${CLIENT_IP}
 local-address=0.0.0.0
 EOF
 )
@@ -98,6 +103,27 @@ if [[ ! -f /var/lib/powerdns/pdns.sqlite3 ]]; then
 fi
 chown -R pdns:pdns /var/lib/powerdns
 
+# ---------- 3.5. Free port 53 (systemd-resolved stub listener) ----------
+# Stock Ubuntu: systemd-resolved holds 127.0.0.53:53, which blocks pdns from
+# binding 0.0.0.0:53. Disable the stub and point resolv.conf at real upstreams.
+STUB_CONF=/etc/systemd/resolved.conf.d/zz-zoner-no-stub.conf
+if command -v systemctl >/dev/null && systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+  if [[ ! -f "$STUB_CONF" ]]; then
+    echo "==> Disabling systemd-resolved stub listener (DNSStubListener=no) to free port 53"
+    mkdir -p /etc/systemd/resolved.conf.d
+    printf '[Resolve]\nDNSStubListener=no\n' > "$STUB_CONF"
+    # resolv.conf must no longer point at the now-dead stub (127.0.0.53)
+    if [[ -e /run/systemd/resolve/resolv.conf ]] && \
+       { [[ "$(readlink -f /etc/resolv.conf 2>/dev/null || true)" == "/run/systemd/resolve/stub-resolv.conf" ]] \
+         || grep -q '127\.0\.0\.53' /etc/resolv.conf 2>/dev/null; }; then
+      cp -a /etc/resolv.conf /etc/resolv.conf.bak-zoner 2>/dev/null || true
+      ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+    fi
+    systemctl restart systemd-resolved
+    echo "    resolv.conf now uses real upstreams (backup: /etc/resolv.conf.bak-zoner)"
+  fi
+fi
+
 # ---------- 4. Run (systemd if available, fallback to direct run) ----------
 if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
   systemctl enable pdns >/dev/null 2>&1 || true
@@ -110,13 +136,28 @@ else
   nohup pdns_server --daemon=no >/var/log/pdns.log 2>&1 &
 fi
 
-# ---------- 5. Firewall (UFW if available) ----------
+# ---------- 5. Firewall (UFW and/or iptables, whichever exists) ----------
 if command -v ufw >/dev/null 2>&1; then
   ufw allow 53/udp >/dev/null 2>&1 || true
   ufw allow 53/tcp >/dev/null 2>&1 || true
   ufw allow from "$PEER_IP" to any port "$API_PORT" >/dev/null 2>&1 || true
-  echo "==> UFW: opened 53/udp+tcp, API ${API_PORT} allowed only from peer ${PEER_IP}"
-  echo "    (if the backend dashboard is on another machine, also run: ufw allow from <backend-ip> to any port ${API_PORT})"
+  ufw allow from "$CLIENT_IP" to any port "$API_PORT" >/dev/null 2>&1 || true
+  echo "==> UFW: opened 53/udp+tcp, API ${API_PORT} allowed only from peer ${PEER_IP} and client ${CLIENT_IP}"
+fi
+if command -v iptables >/dev/null 2>&1; then
+  iptables -C INPUT -p udp --dport 53 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 5 -p udp --dport 53 -m conntrack --ctstate NEW -j ACCEPT || true
+  iptables -C INPUT -p tcp --dport 53 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT 5 -p tcp --dport 53 -m conntrack --ctstate NEW -j ACCEPT || true
+  for SRC in "$PEER_IP" "$CLIENT_IP"; do
+    iptables -C INPUT -p tcp --dport "$API_PORT" -s "$SRC" -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
+      iptables -I INPUT 5 -p tcp --dport "$API_PORT" -s "$SRC" -m conntrack --ctstate NEW -j ACCEPT || true
+  done
+  echo "==> iptables: opened 53/udp+tcp, API ${API_PORT} allowed only from peer ${PEER_IP} and client ${CLIENT_IP}"
+  echo "    Persist: apt install iptables-persistent && netfilter-persistent save"
+fi
+if ! command -v ufw >/dev/null 2>&1 && ! command -v iptables >/dev/null 2>&1; then
+  echo "==> No ufw/iptables (container?) — remember to open 53/udp+tcp at the cloud firewall"
 fi
 
 # ---------- 6. Wait for API ----------

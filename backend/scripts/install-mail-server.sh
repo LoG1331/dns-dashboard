@@ -74,13 +74,18 @@ debconf-set-selections <<< "postfix postfix/main_mailer_type string 'Internet Si
 apt-get update -qq
 apt-get install -y -qq postfix python3 curl sudo >/dev/null
 
-# ---------- 2. firewall ----------
+# ---------- 2. firewall (UFW and/or iptables, whichever exists) ----------
+if command -v ufw >/dev/null 2>&1; then
+  ufw allow 25/tcp >/dev/null 2>&1 || true
+  echo "==> UFW: TCP/25 opened"
+fi
 if command -v iptables >/dev/null 2>&1; then
   iptables -C INPUT -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT 2>/dev/null || \
     iptables -I INPUT 5 -p tcp --dport 25 -m conntrack --ctstate NEW -j ACCEPT || true
-  echo "==> TCP/25 opened (iptables). Persist: apt install iptables-persistent && netfilter-persistent save"
-else
-  echo "==> No iptables (container?) — remember to open TCP/25 at the cloud firewall"
+  echo "==> iptables: TCP/25 opened. Persist: apt install iptables-persistent && netfilter-persistent save"
+fi
+if ! command -v ufw >/dev/null 2>&1 && ! command -v iptables >/dev/null 2>&1; then
+  echo "==> No ufw/iptables (container?) — remember to open TCP/25 at the cloud firewall"
 fi
 
 # ---------- 3. postfix base config ----------
@@ -129,8 +134,12 @@ if command -v sudo >/dev/null 2>&1; then
   echo 'zoner ALL=(root) NOPASSWD: /opt/zoner-mail/mail-domain' > /etc/sudoers.d/zoner-mail
   chmod 440 /etc/sudoers.d/zoner-mail
 fi
-# Agent needs to read/write the forwarder config
-chown -R zoner:zoner "$OPT"
+# Ownership: $OPT stays root-owned — mail-domain must NOT be writable by
+# zoner, because sudo runs it as root (a writable mail-domain = root
+# escalation). The agent only needs to read/write mail-forwarder.json
+# (chowned to PIPE_USER above) and to read/execute the rest.
+chown -R root:root "$OPT"
+chown "${PIPE_USER}:${PIPE_USER}" "$OPT/mail-forwarder.json" 2>/dev/null || true
 
 if command -v systemctl >/dev/null && systemctl is-system-running >/dev/null 2>&1; then
   echo "==> Installing $SERVICE (systemd)..."
@@ -148,7 +157,9 @@ Environment=AGENT_HOST=${AGENT_HOST:-0.0.0.0}
 Environment=AGENT_PORT=${AGENT_PORT}
 Environment=AGENT_TOKEN=${AGENT_TOKEN}
 Environment=MAIL_CMD=${OPT}/mail-domain
-NoNewPrivileges=true
+# NOTE: no NoNewPrivileges=true — it would block sudo (setuid) and the
+# agent needs `sudo -n mail-domain`. The narrow sudoers rule is the
+# privilege boundary instead.
 ProtectSystem=strict
 ReadWritePaths=${OPT}
 
