@@ -15,7 +15,7 @@
 #   WEBHOOK_TOKEN   — Bearer token for the webhook (optional)
 #   AGENT_TOKEN     — Bearer token for the mail agent (random if missing)
 #   AGENT_PORT      — default 9099
-#   PIPE_USER       — user the postfix pipe runs as (default: current sudo user)
+#   PIPE_USER       — user the postfix pipe runs as (default: zoner, created by this script)
 # ============================================================
 set -euo pipefail
 
@@ -42,6 +42,8 @@ if [[ "${1:-}" == "--uninstall" ]]; then
   fi
   postconf -X transport_maps 2>/dev/null || true
   postconf -X webhook_destination_recipient_limit 2>/dev/null || true
+  rm -f /etc/sudoers.d/zoner-mail
+  userdel zoner 2>/dev/null || true
   rm -rf "$OPT"
   postfix check 2>/dev/null && systemctl reload postfix 2>/dev/null || true
   echo "Removed. /opt/zoner-mail, the systemd unit and master.cf block are gone."
@@ -55,10 +57,14 @@ fi
 if [[ -z "${WEBHOOK_URL:-}" ]]; then
   read -rp "Webhook target URL (mail is POSTed there): " WEBHOOK_URL
 fi
-PIPE_USER="${PIPE_USER:-${SUDO_USER:-ubuntu}}"
+PIPE_USER="${PIPE_USER:-zoner}"
 AGENT_TOKEN="${AGENT_TOKEN:-$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom 2>/dev/null | head -c 32 || true)}"
 
 echo "==> MX hostname: $MX_HOSTNAME | agent port: $AGENT_PORT | pipe user: $PIPE_USER"
+
+# Dedicated unprivileged user for the agent + postfix pipe (created early,
+# used by the master.cf pipe below)
+id -u zoner >/dev/null 2>&1 || useradd --system --no-create-home --shell /usr/sbin/nologin zoner
 
 # ---------- 1. packages ----------
 echo "==> Installing postfix + python3..."
@@ -82,25 +88,26 @@ postconf -e 'webhook_destination_recipient_limit = 1'
 
 # ---------- 4. /opt/zoner-mail ----------
 echo "==> Installing custom files into $OPT..."
-mkdir -p "$OPT"
+mkdir -p "$OPT/handlers"   # root-managed custom handlers (dashboard can only pick, never upload)
 touch "$OPT/transport"
 cp "$AGENT_DIR/mail-agent.py" "$OPT/mail-agent.py"
 cp "$AGENT_DIR/mail-domain" "$OPT/mail-domain"
 cp "$AGENT_DIR/mail-forwarder.py" "$OPT/mail-forwarder"
 chmod 755 "$OPT/mail-domain" "$OPT/mail-forwarder" "$OPT/mail-agent.py"
+chmod 755 "$OPT/handlers"
 
 if [[ ! -f "$OPT/mail-forwarder.json" ]]; then
-  # command: custom script nhận mail thô qua stdin (envelope qua env EMAIL_*)
   cat > "$OPT/mail-forwarder.json" <<EOF
 {
   "target_url": "${WEBHOOK_URL}",
   "auth_token": "${WEBHOOK_TOKEN:-}",
   "worker_name": "postfix",
-  "command": ""
+  "body_format": "raw"
 }
 EOF
-  chmod 600 "$OPT/mail-forwarder.json"
 fi
+chown "${PIPE_USER}:${PIPE_USER}" "$OPT/mail-forwarder.json" 2>/dev/null || true
+chmod 600 "$OPT/mail-forwarder.json"
 
 # ---------- 5. webhook pipe in master.cf (idempotent, marked) ----------
 if ! grep -q "^${MARK}" "$MASTER_CF"; then
@@ -111,26 +118,35 @@ webhook   unix  -       n       n       -       -       pipe
 EOF
 fi
 
-# ---------- 6. mail agent (systemd, root) ----------
+# ---------- 6. mail agent (systemd, non-root user) ----------
 echo "==> Installing $SERVICE..."
+# Agent (user zoner) may only run the mail-domain script as root
+echo 'zoner ALL=(root) NOPASSWD: /opt/zoner-mail/mail-domain' > /etc/sudoers.d/zoner-mail
+chmod 440 /etc/sudoers.d/zoner-mail
+# Agent needs to read/write the forwarder config
+chown -R zoner:zoner "$OPT"
+
 cat > "/etc/systemd/system/${SERVICE}.service" <<EOF
 [Unit]
 Description=zoner mail agent
 After=network.target postfix.service
 
 [Service]
+User=zoner
 ExecStart=$(command -v python3) ${OPT}/mail-agent.py
 Restart=always
 RestartSec=3
+Environment=AGENT_HOST=${AGENT_HOST:-0.0.0.0}
 Environment=AGENT_PORT=${AGENT_PORT}
 Environment=AGENT_TOKEN=${AGENT_TOKEN}
 Environment=MAIL_CMD=${OPT}/mail-domain
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=${OPT}
 
 [Install]
 WantedBy=multi-user.target
 EOF
-
-# Agent chạy bằng python3 (đã cài ở bước packages) — không cần thêm runtime
 
 systemctl daemon-reload
 systemctl enable --now "$SERVICE"

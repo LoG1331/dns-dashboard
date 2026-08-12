@@ -114,6 +114,15 @@ router.put("/forwarder", async (req, res) => {
   }
 });
 
+// GET /mail/handlers — danh sách handler cài sẵn trên mail server
+router.get("/handlers", async (_req, res) => {
+  try {
+    res.json(await agentRequest("GET", "/handlers"));
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
 // DELETE /mail/domains/:domain
 router.delete("/domains/:domain", async (req, res) => {
   const domain = req.params.domain.toLowerCase().replace(/\.$/, "");

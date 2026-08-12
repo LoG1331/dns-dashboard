@@ -17,7 +17,8 @@ const Settings = () => {
     const [secondariesText, setSecondariesText] = useState('');
 
     // Mail forwarder state
-    const [forwarder, setForwarder] = useState({ target_url: '', auth_token: '', command: '' });
+    const [forwarder, setForwarder] = useState({ target_url: '', auth_token: '', body_format: 'raw', handler: '', headers: '' });
+    const [handlers, setHandlers] = useState([]);
     const [fwdLoading, setFwdLoading] = useState(false);
     const [fwdMessage, setFwdMessage] = useState({ type: '', text: '' });
     const [configLoading, setConfigLoading] = useState(false);
@@ -40,10 +41,13 @@ const Settings = () => {
             setForwarder({
                 target_url: res.data.target_url || '',
                 auth_token: res.data.auth_token || '',
-                command: Array.isArray(res.data.command) ? res.data.command.join(' ') : (res.data.command || ''),
+                body_format: res.data.body_format || 'raw',
+                handler: res.data.handler || '',
+                headers: Object.entries(res.data.headers || {}).map(([k, v]) => `${k}: ${v}`).join('\n'),
             });
+            setHandlers(res.data.handlers || []);
         } catch {
-            // agent chưa cấu hình — bỏ qua
+            // agent not configured — skip
         }
     };
 
@@ -52,11 +56,17 @@ const Settings = () => {
         setFwdMessage({ type: '', text: '' });
         setFwdLoading(true);
         try {
-            const body = {};
+            const body = { worker_name: 'postfix' };
             if (forwarder.target_url) body.target_url = forwarder.target_url;
             if (forwarder.auth_token) body.auth_token = forwarder.auth_token;
-            if (forwarder.command) body.command = forwarder.command;
-            body.worker_name = 'postfix';
+            body.body_format = forwarder.body_format || 'raw';
+            if (forwarder.handler) body.handler = forwarder.handler;
+            const headers = {};
+            for (const line of forwarder.headers.split('\n')) {
+                const i = line.indexOf(':');
+                if (i > 0) headers[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+            }
+            if (Object.keys(headers).length) body.headers = headers;
             await api.put('/mail/forwarder', body);
             setFwdMessage({ type: 'success', text: 'Forwarder config saved' });
         } catch (err) {
@@ -519,18 +529,43 @@ const Settings = () => {
                             placeholder="••••••••"
                         />
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Body Format</label>
+                            <select
+                                value={forwarder.body_format}
+                                onChange={(e) => setForwarder({ ...forwarder, body_format: e.target.value })}
+                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all font-mono text-sm"
+                            >
+                                <option value="raw">raw (RFC822 as-is)</option>
+                                <option value="base64">base64 (JSON envelope)</option>
+                                <option value="json">json (parsed fields)</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Custom Headers (optional)</label>
+                            <textarea
+                                value={forwarder.headers}
+                                onChange={(e) => setForwarder({ ...forwarder, headers: e.target.value })}
+                                rows={1}
+                                className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                                placeholder="X-Api-Key: abc123"
+                            />
+                        </div>
+                    </div>
                     <div className="space-y-1.5">
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Custom Command (optional)</label>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Handler (optional)</label>
                         <p className="text-gray-500 text-xs">
-                            Runs on the mail server for every incoming mail. Raw message via stdin; envelope in <code className="text-[#38BDF8] font-mono">EMAIL_ENVELOPE_FROM/TO</code>, <code className="text-[#38BDF8] font-mono">EMAIL_DOMAIN</code> env vars. Non-zero exit = postfix retries.
+                            A pre-installed script on the mail server (<code className="text-[#38BDF8] font-mono">/opt/zoner-mail/handlers/</code>). Raw message via stdin; envelope in <code className="text-[#38BDF8] font-mono">EMAIL_*</code> env vars. For security, only root can install handlers.
                         </p>
-                        <input
-                            type="text"
-                            value={forwarder.command}
-                            onChange={(e) => setForwarder({ ...forwarder, command: e.target.value })}
-                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
-                            placeholder="/opt/zoner-mail/my-handler.sh"
-                        />
+                        <select
+                            value={forwarder.handler}
+                            onChange={(e) => setForwarder({ ...forwarder, handler: e.target.value })}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all font-mono text-sm"
+                        >
+                            <option value="">None (webhook only)</option>
+                            {handlers.map(h => <option key={h} value={h}>{h}</option>)}
+                        </select>
                     </div>
                     <button
                         type="submit"
