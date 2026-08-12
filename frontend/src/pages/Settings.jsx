@@ -15,6 +15,11 @@ const Settings = () => {
     // PowerDNS Config State
     const [config, setConfig] = useState({ pdnsApiUrl: '', pdnsApiKey: '', pdnsServerId: '', zoneKind: 'Native', ns1: '', ns2: '', masterAddress: '', secondaries: '[]', mxHost: '', mailAgentUrl: '', mailAgentToken: '', pdnsConnected: false });
     const [secondariesText, setSecondariesText] = useState('');
+
+    // Mail forwarder state
+    const [forwarder, setForwarder] = useState({ target_url: '', auth_token: '', command: '' });
+    const [fwdLoading, setFwdLoading] = useState(false);
+    const [fwdMessage, setFwdMessage] = useState({ type: '', text: '' });
     const [configLoading, setConfigLoading] = useState(false);
     const [configMessage, setConfigMessage] = useState({ type: '', text: '' });
 
@@ -26,7 +31,40 @@ const Settings = () => {
     useEffect(() => {
         fetchUser();
         fetchConfig();
+        fetchForwarder();
     }, []);
+
+    const fetchForwarder = async () => {
+        try {
+            const res = await api.get('/mail/forwarder');
+            setForwarder({
+                target_url: res.data.target_url || '',
+                auth_token: res.data.auth_token || '',
+                command: Array.isArray(res.data.command) ? res.data.command.join(' ') : (res.data.command || ''),
+            });
+        } catch {
+            // agent chưa cấu hình — bỏ qua
+        }
+    };
+
+    const handleSaveForwarder = async (e) => {
+        e.preventDefault();
+        setFwdMessage({ type: '', text: '' });
+        setFwdLoading(true);
+        try {
+            const body = {};
+            if (forwarder.target_url) body.target_url = forwarder.target_url;
+            if (forwarder.auth_token) body.auth_token = forwarder.auth_token;
+            if (forwarder.command) body.command = forwarder.command;
+            body.worker_name = 'postfix';
+            await api.put('/mail/forwarder', body);
+            setFwdMessage({ type: 'success', text: 'Forwarder config saved' });
+        } catch (err) {
+            setFwdMessage({ type: 'error', text: err.response?.data?.error || err.message });
+        } finally {
+            setFwdLoading(false);
+        }
+    };
 
     const fetchConfig = async () => {
         try {
@@ -438,6 +476,69 @@ const Settings = () => {
                     >
                         {configLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
                         Save Configuration
+                    </button>
+                </form>
+            </div>
+
+            {/* Mail Forwarder (webhook hoặc command tuỳ chỉnh trên mail server) */}
+            <div className="bg-[#262626]/40 backdrop-blur-md border border-white/5 rounded-2xl p-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-32 bg-[#C485FB]/5 blur-3xl rounded-full pointer-events-none -translate-y-1/2 translate-x-1/2"></div>
+
+                <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                    <Mail className="w-5 h-5 text-[#38BDF8]" /> Mail Forwarder
+                </h2>
+                <p className="text-gray-400 text-sm mb-6">
+                    What happens when mail arrives. Choose a webhook target and/or a custom command on the mail server (raw message on stdin, envelope via env vars).
+                </p>
+
+                {fwdMessage.text && (
+                    <div className={`mb-4 max-w-2xl p-3 rounded-lg flex items-center gap-2 text-sm ${fwdMessage.type === 'success' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                        {fwdMessage.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                        {fwdMessage.text}
+                    </div>
+                )}
+
+                <form onSubmit={handleSaveForwarder} className="space-y-4 max-w-2xl">
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Webhook URL</label>
+                        <input
+                            type="text"
+                            value={forwarder.target_url}
+                            onChange={(e) => setForwarder({ ...forwarder, target_url: e.target.value })}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                            placeholder="https://your-app/v1/inbound/email"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Webhook Token (optional)</label>
+                        <input
+                            type="password"
+                            value={forwarder.auth_token}
+                            onChange={(e) => setForwarder({ ...forwarder, auth_token: e.target.value })}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                            placeholder="••••••••"
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide">Custom Command (optional)</label>
+                        <p className="text-gray-500 text-xs">
+                            Runs on the mail server for every incoming mail. Raw message via stdin; envelope in <code className="text-[#38BDF8] font-mono">EMAIL_ENVELOPE_FROM/TO</code>, <code className="text-[#38BDF8] font-mono">EMAIL_DOMAIN</code> env vars. Non-zero exit = postfix retries.
+                        </p>
+                        <input
+                            type="text"
+                            value={forwarder.command}
+                            onChange={(e) => setForwarder({ ...forwarder, command: e.target.value })}
+                            className="w-full bg-black/20 border border-white/10 rounded-xl py-2.5 px-4 text-white focus:border-[#38BDF8] focus:outline-none focus:ring-1 focus:ring-[#38BDF8] transition-all placeholder-gray-600 font-mono text-sm"
+                            placeholder="/opt/zoner-mail/my-handler.sh"
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={fwdLoading}
+                        className="bg-[#38BDF8] hover:bg-[#0EA5E9] text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all shadow-[0_0_15px_rgba(56,189,248,0.2)] disabled:opacity-50"
+                    >
+                        {fwdLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                        Save Forwarder
                     </button>
                 </form>
             </div>

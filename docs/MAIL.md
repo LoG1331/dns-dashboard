@@ -43,9 +43,27 @@ sudo bash backend/scripts/install-mail-server.sh --uninstall
 
 ## 4. Use
 
-Tab **Mail** → add domain → the zone gets its MX record automatically and the mail server starts accepting `*@domain` (catch-all → webhook).
+Tab **Mail** → add domain → the zone gets its MX record automatically and the mail server starts accepting `*@domain` (catch-all → forwarder).
 
-## 5. Test
+## 5. Custom mail handling (webhook or your own script)
+
+The forwarder is configurable remotely — dashboard **Settings → Mail Forwarder**:
+
+- **Webhook URL (+token)**: POST the raw RFC822 message with `X-Email-*` headers
+- **Custom Command**: any script on the mail server — raw message via stdin, envelope in `EMAIL_ENVELOPE_FROM` / `EMAIL_ENVELOPE_TO` / `EMAIL_DOMAIN` / `EMAIL_SIZE`. Non-zero exit code = postfix retries (EX_TEMPFAIL)
+- Both can be set: command runs first, webhook second
+
+Equivalent config file on the server: `/opt/zoner-mail/mail-forwarder.json`
+
+```json
+{
+  "target_url": "https://your-app/v1/inbound/email",
+  "auth_token": "",
+  "command": "/opt/zoner-mail/my-handler.sh"
+}
+```
+
+## 6. Test
 
 ```bash
 journalctl -u postfix -f | grep --line-buffered postfix

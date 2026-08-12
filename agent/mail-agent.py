@@ -17,6 +17,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = int(os.environ.get("AGENT_PORT", "9099"))
 TOKEN = os.environ.get("AGENT_TOKEN", "")
 MAIL_CMD = os.environ.get("MAIL_CMD", "/opt/zoner-mail/mail-domain")
+FORWARDER_CONFIG = os.environ.get(
+    "FORWARDER_CONFIG", "/opt/zoner-mail/mail-forwarder.json"
+)
 DOMAIN_RE = re.compile(r"^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$", re.I)
 
 if not TOKEN:
@@ -68,7 +71,40 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(200, {"domains": domains})
             except Exception as e:
                 return self._json(500, {"error": str(e)})
+        if self.path == "/forwarder":
+            try:
+                with open(FORWARDER_CONFIG, encoding="utf-8") as f:
+                    return self._json(200, json.load(f))
+            except FileNotFoundError:
+                return self._json(200, {})
+            except Exception as e:
+                return self._json(500, {"error": str(e)})
         return self._json(404, {"error": "Not found"})
+
+    def do_PUT(self):
+        if not self._auth_ok():
+            return self._json(401, {"error": "Unauthorized"})
+        if self.path != "/forwarder":
+            return self._json(404, {"error": "Not found"})
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            body = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("config must be a JSON object")
+            # chỉ cho phép các key đã biết
+            allowed = {"target_url", "auth_token", "worker_name", "command"}
+            config = {k: v for k, v in body.items() if k in allowed}
+            if "command" in config and not isinstance(config["command"], (str, list)):
+                raise ValueError("command must be a string or a list")
+            os.makedirs(os.path.dirname(FORWARDER_CONFIG), exist_ok=True)
+            with open(FORWARDER_CONFIG, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2)
+            os.chmod(FORWARDER_CONFIG, 0o600)
+            return self._json(200, config)
+        except ValueError as e:
+            return self._json(400, {"error": str(e)})
+        except Exception:
+            return self._json(400, {"error": "Bad request"})
 
     def do_POST(self):
         if not self._auth_ok():

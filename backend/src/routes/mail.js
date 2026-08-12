@@ -96,6 +96,24 @@ router.post("/domains", async (req, res) => {
   res.status(201).json({ message: "Mail domain added", mx });
 });
 
+// GET /mail/forwarder — đọc config forwarder từ agent
+router.get("/forwarder", async (_req, res) => {
+  try {
+    res.json(await agentRequest("GET", "/forwarder"));
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
+// PUT /mail/forwarder — sửa config forwarder (webhook hoặc command tuỳ chỉnh)
+router.put("/forwarder", async (req, res) => {
+  try {
+    res.json(await agentRequest("PUT", "/forwarder", req.body || {}));
+  } catch (err) {
+    res.status(err.status || 502).json({ error: err.message });
+  }
+});
+
 // DELETE /mail/domains/:domain
 router.delete("/domains/:domain", async (req, res) => {
   const domain = req.params.domain.toLowerCase().replace(/\.$/, "");

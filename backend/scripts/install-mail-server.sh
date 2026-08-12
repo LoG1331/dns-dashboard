@@ -90,11 +90,13 @@ cp "$AGENT_DIR/mail-forwarder.py" "$OPT/mail-forwarder"
 chmod 755 "$OPT/mail-domain" "$OPT/mail-forwarder" "$OPT/mail-agent.py"
 
 if [[ ! -f "$OPT/mail-forwarder.json" ]]; then
+  # command: custom script nhận mail thô qua stdin (envelope qua env EMAIL_*)
   cat > "$OPT/mail-forwarder.json" <<EOF
 {
   "target_url": "${WEBHOOK_URL}",
   "auth_token": "${WEBHOOK_TOKEN:-}",
-  "worker_name": "postfix"
+  "worker_name": "postfix",
+  "command": ""
 }
 EOF
   chmod 600 "$OPT/mail-forwarder.json"
