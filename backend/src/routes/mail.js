@@ -1,6 +1,6 @@
 // Mail domains: remote control of the mail receiver via the zoner mail agent
 // (HTTP + Bearer token, same pattern as PowerDNS API). The agent runs on the
-// mail server and manages /etc/postfix/transport — see docs/MAIL.md.
+// mail server and manages the Haraka host_list — see docs/MAIL.md.
 import { Router } from "express";
 import { requireAuth } from "../auth.js";
 import { getConfig } from "../config.js";

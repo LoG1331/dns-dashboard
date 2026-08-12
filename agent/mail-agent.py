@@ -201,9 +201,10 @@ class Handler(BaseHTTPRequestHandler):
         domain = self._domain(self.path[len(prefix):])
         if not domain:
             return self._json(400, {"error": "Invalid domain name"})
-        if remove_domain(domain):
-            return self._json(200, {"message": "Mail domain removed"})
-        return self._json(404, {"error": "Domain not found"})
+        # idempotent: removing an absent domain is still a success
+        # (matches the old mail-domain behavior; the dashboard may drift)
+        remove_domain(domain)
+        return self._json(200, {"message": "Mail domain removed"})
 
 
 if __name__ == "__main__":
