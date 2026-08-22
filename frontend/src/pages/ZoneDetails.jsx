@@ -163,9 +163,9 @@ const ZoneDetails = () => {
             return;
         }
 
-        // Wildcard check
-        if (recordName.includes('*')) {
-            toast.warning('Wildcard records are not allowed');
+        // Wildcard check — only allowed as the leftmost label: "*" or "*.sub"
+        if (recordName.includes('*') && !/^\*(\.[a-z0-9-]+)*$/i.test(recordName)) {
+            toast.warning('Wildcard (*) is only allowed as the leftmost label');
             return;
         }
 

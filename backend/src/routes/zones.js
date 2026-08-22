@@ -41,6 +41,8 @@ const NAMESERVERS = () => {
 
 const ALLOWED_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA"];
 const DOMAIN_RE = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.[a-z0-9-]{1,63})+$/i;
+// wildcard allowed only as the leftmost label: "*" or "*.sub.domain"
+const WILDCARD_RE = /^\*(\.(?!-)[a-z0-9-]{1,63}(?<!-))*$/i;
 
 const fqdn = (name) => (name.endsWith(".") ? name : `${name}.`);
 
@@ -239,7 +241,8 @@ router.get("/:id/records", async (req, res) => {
 function validateRecord(zoneName, { type, name, content, ttl }) {
   if (!ALLOWED_TYPES.includes(type))
     return `Record type ${type} is not supported`;
-  if (!name || name.includes("*")) return "Invalid record name";
+  if (!name || (name.includes("*") && !WILDCARD_RE.test(name)))
+    return "Invalid record name";
   if (!content) return "Record content is required";
   ttl = Number(ttl);
   if (!Number.isInteger(ttl) || ttl < 3600)
