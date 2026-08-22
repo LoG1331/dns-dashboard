@@ -4,7 +4,10 @@
 //
 // Accept domains: the rcpt hook below reads config/host_list directly
 // (managed remotely by the zoner mail agent) — changes take effect
-// immediately, no reload, no restart.
+// immediately, no reload, no restart. A listed domain is a catch-all for
+// itself AND every subdomain: example.com accepts user@example.com,
+// user@abc.example.com and user@foo.bar.example.com. The original envelope
+// recipient is preserved end-to-end (X-Email-Envelope-To / EMAIL_ENVELOPE_TO).
 //
 // Delivery config: /opt/zoner-mail/mail-forwarder.json (same schema as the
 // old postfix pipe):
@@ -40,9 +43,12 @@ exports.register = function () {
   this.register_hook('queue', 'forward_all');
 };
 
-// Accept any recipient whose domain is in host_list. Read per-RCPT instead of
-// relying on Haraka's config watcher — the agent's edits take effect
-// immediately and there is no reload race (a 550 here is a HARD bounce).
+// Accept any recipient whose domain is in host_list — a listed domain is a
+// catch-all for itself AND every subdomain of it (any depth): example.com
+// also accepts user@abc.example.com and user@foo.bar.example.com. Read
+// per-RCPT instead of relying on Haraka's config watcher — the agent's edits
+// take effect immediately and there is no reload race (a 550 here is a HARD
+// bounce).
 exports.check_host_list = function (next, connection, params) {
   const txn = connection.transaction;
   if (!txn) return next();
@@ -55,7 +61,10 @@ exports.check_host_list = function (next, connection, params) {
       .map((l) => l.trim().toLowerCase())
       .filter((l) => l && !l.startsWith('#'));
   } catch (e) { /* missing file = no domains */ }
-  if (domains.includes(rcpt.host.toLowerCase())) return next(OK);
+  const host = rcpt.host.toLowerCase();
+  // exact match or ".<domain>" suffix — the leading dot keeps lookalikes
+  // (evilexample.com) out while matching every subdomain level.
+  if (domains.some((d) => host === d || host.endsWith('.' + d))) return next(OK);
   return next();
 };
 
@@ -69,6 +78,13 @@ function loadConfig () {
 
 function clean (value) {
   return String(value || '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+// Address.format() wraps the address in <> — downstream consumers (webhook
+// headers, handler env vars) want the bare envelope address, like the old
+// postfix pipe passed it
+function bare (addr) {
+  return addr.format().replace(/^</, '').replace(/>$/, '');
 }
 
 // message_stream is a custom stream: data flows only through its pipe().
@@ -169,10 +185,9 @@ function post (target, headers, body) {
   });
 }
 
-async function postWebhook (plugin, cfg, txn, raw, sender, recipient) {
+async function postWebhook (plugin, cfg, txn, raw, sender, recipient, domain) {
   const target = cfg.target_url;
   if (!target) return; // no webhook configured — handler-only mode
-  const domain = recipient.includes('@') ? recipient.split('@').pop().toLowerCase() : '';
   const headers = {
     'X-Email-Envelope-From': sender,
     'X-Email-Envelope-To': recipient,
@@ -212,14 +227,14 @@ exports.forward_all = async function (next, connection) {
     return next(DENYSOFT, 'message read error, retry later');
   }
 
-  const sender = txn.mail_from.format();
+  const sender = bare(txn.mail_from);
   // one delivery per recipient (mirrors the old postfix recipient_limit=1)
   for (const rcpt of txn.rcpt_to) {
-    const recipient = rcpt.format();
-    const domain = recipient.includes('@') ? recipient.split('@').pop().toLowerCase() : '';
+    const recipient = bare(rcpt); // original envelope recipient, as sent
+    const domain = rcpt.host ? rcpt.host.toLowerCase() : '';
     try {
       if (cfg.handler) await runHandler(cfg.handler, sender, recipient, domain, raw);
-      await postWebhook(plugin, cfg, txn, raw, sender, recipient);
+      await postWebhook(plugin, cfg, txn, raw, sender, recipient, domain);
     } catch (e) {
       plugin.logerror(`${recipient}: ${e.message}`);
       return next(DENYSOFT, 'forward failed, retry later');

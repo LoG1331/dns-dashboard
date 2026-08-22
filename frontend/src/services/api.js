@@ -67,7 +67,7 @@ export const deleteTemplate = async (id) => {
     return response.data;
 };
 
-// Mail domains (Postfix trên cùng máy)
+// Mail domains (Haraka catch-all trên mail server, quản lý qua mail agent)
 export const getMailDomains = async () => {
     const response = await api.get('/mail/domains');
     return response.data;

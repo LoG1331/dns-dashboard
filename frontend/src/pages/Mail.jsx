@@ -7,6 +7,23 @@ import ConfirmDialog from '../components/ConfirmDialog';
 
 const TOKEN_MASK = '••••••••';
 
+// Group mail domains by parent domain (last two labels) and tint each group
+// so related subdomains sit together and stay visually distinct.
+const GROUP_TINTS = [
+    { row: 'bg-[#38BDF8]/5', icon: 'text-[#38BDF8]' },
+    { row: 'bg-[#C485FB]/5', icon: 'text-[#C485FB]' },
+    { row: 'bg-[#34D399]/5', icon: 'text-[#34D399]' },
+    { row: 'bg-[#FBBF24]/5', icon: 'text-[#FBBF24]' },
+    { row: 'bg-[#F87171]/5', icon: 'text-[#F87171]' },
+    { row: 'bg-[#22D3EE]/5', icon: 'text-[#22D3EE]' },
+];
+
+const parentDomain = (d) => d.split('.').slice(-2).join('.');
+
+// sort right-to-left so domains sharing a parent end up adjacent
+const byReversed = (a, b) =>
+    a.split('.').reverse().join('.').localeCompare(b.split('.').reverse().join('.'));
+
 const MailPage = () => {
     const toast = useToast();
     const [domains, setDomains] = useState([]);
@@ -100,7 +117,7 @@ const MailPage = () => {
         setFwdMessage({ type: '', text: '' });
         setFwdLoading(true);
         try {
-            const body = { worker_name: 'postfix' };
+            const body = { worker_name: 'haraka' };
             if (forwarder.target_url) body.target_url = forwarder.target_url;
             if (forwarder.auth_token) body.auth_token = forwarder.auth_token;
             body.body_format = forwarder.body_format || 'raw';
@@ -136,6 +153,16 @@ const MailPage = () => {
         }
     };
 
+    // sorted right-to-left so domains sharing a parent sit together; each
+    // parent group gets its own tint (stable across renders)
+    const sortedDomains = [...domains].sort(byReversed);
+    const groupTintOf = {};
+    let groupCount = 0;
+    for (const d of sortedDomains) {
+        const p = parentDomain(d);
+        if (!(p in groupTintOf)) groupTintOf[p] = groupCount++ % GROUP_TINTS.length;
+    }
+
     const handleDelete = (domain) => {
         setConfirmDialog({
             isOpen: true,
@@ -167,7 +194,7 @@ const MailPage = () => {
             <div>
                 <h1 className="text-3xl font-bold text-white mb-2">Mail Domains</h1>
                 <p className="text-gray-400 text-sm">
-                    Domains this server accepts mail for (Postfix catch-all → webhook).
+                    Domains this server accepts mail for (Haraka catch-all → webhook, subdomains included).
                     {mxHost
                         ? <> MX records are auto-created pointing to <span className="text-[#38BDF8] font-mono">{mxHost}</span> when the zone exists.</>
                         : <> Set <span className="text-[#38BDF8]">MX Hostname</span> in the Mail Server section below to auto-create MX records.</>}
@@ -203,7 +230,7 @@ const MailPage = () => {
                         <div>
                             {error}
                             <p className="text-xs text-gray-500 mt-2">
-                                Requires the mail-domain script on this server and a sudoers NOPASSWD rule for the backend user.
+                                Requires the mail agent (install-mail-server.sh) on the mail server and its URL + token in the Mail Server section below.
                             </p>
                         </div>
                     </div>
@@ -212,21 +239,24 @@ const MailPage = () => {
                         No mail domains yet
                     </div>
                 ) : (
-                    <div className="divide-y divide-white/5 border border-white/5 rounded-xl overflow-hidden">
-                        {domains.map(d => (
-                            <div key={d} className="px-4 py-3 flex items-center gap-3 bg-black/20 hover:bg-white/[0.03] transition-colors">
-                                <Mail className="w-4 h-4 text-[#38BDF8] shrink-0" />
-                                <span className="flex-1 text-sm font-mono text-white">{d}</span>
-                                <span className="text-[10px] text-gray-500 font-mono uppercase">catch-all</span>
-                                <button
-                                    onClick={() => handleDelete(d)}
-                                    className="text-gray-500 hover:text-red-400 transition-colors p-1.5"
-                                    title="Remove"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
-                            </div>
-                        ))}
+                    <div className="border border-white/5 rounded-xl overflow-hidden">
+                        {sortedDomains.map((d, i) => {
+                            const tint = GROUP_TINTS[groupTintOf[parentDomain(d)]];
+                            return (
+                                <div key={d} className={`px-4 py-3 flex items-center gap-3 hover:bg-white/[0.06] transition-colors ${tint.row} ${i > 0 ? 'border-t border-white/5' : ''}`}>
+                                    <Mail className={`w-4 h-4 ${tint.icon} shrink-0`} />
+                                    <span className="flex-1 text-sm font-mono text-white">{d}</span>
+                                    <span className="text-[10px] text-gray-500 font-mono uppercase">{parentDomain(d)}</span>
+                                    <button
+                                        onClick={() => handleDelete(d)}
+                                        className="text-gray-500 hover:text-red-400 transition-colors p-1.5"
+                                        title="Remove"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            );
+                        })}
                     </div>
                 )}
             </div>

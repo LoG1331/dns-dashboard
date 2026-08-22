@@ -9,7 +9,9 @@
 #   3. port 25 bound via AmbientCapabilities (user != root, port < 1024)
 #   4. agent API: add domain -> host_list, auth enforced
 #   5. real SMTP: mail to accepted domain -> webhook POST received
-#                 mail to unknown domain -> rejected (550)
+#                 mail to subdomains (any depth) -> accepted, original
+#                 envelope recipient preserved
+#                 mail to unknown/lookalike domain -> rejected (550)
 #
 # Usage:  bash backend/scripts/test-mail-server-podman.sh
 #         KEEP=1 bash ...   (keep container for debugging)
@@ -109,31 +111,40 @@ podman exec "$NAME" curl -sf -H "Authorization: Bearer testtoken123" \
 podman exec "$NAME" grep -qx 'example.com' /opt/zoner-mail/haraka/config/host_list || fail "host_list missing example.com"
 echo "domain added to host_list, unauth request rejected"
 
-step "SMTP: mail to accepted domain -> webhook"
+step "SMTP: mail to accepted domain + subdomains -> webhook"
 podman exec "$NAME" python3 -c '
 import smtplib
-s = smtplib.SMTP("127.0.0.1", 25, timeout=15)
-s.sendmail("sender@other.org", ["user@example.com"],
-           "Subject: podman e2e\r\n\r\nhello from podman\r\n")
-s.quit()
+targets = [
+    "user@example.com",           # apex
+    "user@abc.example.com",       # one-level subdomain
+    "user@foo.bar.example.com",   # deep subdomain
+]
+for t in targets:
+    s = smtplib.SMTP("127.0.0.1", 25, timeout=15)
+    s.sendmail("sender@other.org", [t],
+               f"Subject: podman e2e\r\n\r\nhello to {t}\r\n")
+    s.quit()
 '
 for i in $(seq 1 10); do
-  podman exec "$NAME" grep -q 'user@example.com' /tmp/webhook.log 2>/dev/null && break
+  podman exec "$NAME" grep -q 'user@foo.bar.example.com' /tmp/webhook.log 2>/dev/null && break
   sleep 1
 done
-podman exec "$NAME" grep -q 'user@example.com' /tmp/webhook.log 2>/dev/null \
-  || fail "webhook never received the mail"
-echo "webhook received the forwarded mail"
+for t in 'user@example.com' 'user@abc.example.com' 'user@foo.bar.example.com'; do
+  podman exec "$NAME" grep -q "X-Email-Envelope-To: $t" /tmp/webhook.log 2>/dev/null \
+    || fail "webhook never received $t with its original envelope recipient"
+done
+echo "webhook received all three, envelope recipients preserved"
 
-step "SMTP: mail to unknown domain -> rejected"
-if podman exec "$NAME" python3 -c '
+step "SMTP: mail to unknown/lookalike domain -> rejected"
+for t in 'user@nope.net' 'user@evilexample.com'; do
+  if podman exec "$NAME" python3 -c "
 import smtplib
-s = smtplib.SMTP("127.0.0.1", 25, timeout=15)
-s.sendmail("sender@other.org", ["user@nope.net"], "Subject: x\r\n\r\nx\r\n")
-' 2>/dev/null; then
-  fail "mail to unlisted domain was accepted"
-else
-  echo "unlisted domain rejected"
-fi
+s = smtplib.SMTP('127.0.0.1', 25, timeout=15)
+s.sendmail('sender@other.org', ['$t'], 'Subject: x\r\n\r\nx\r\n')
+" 2>/dev/null; then
+    fail "mail to $t was accepted"
+  fi
+done
+echo "unlisted + lookalike domains rejected"
 
 step "ALL TESTS PASSED"

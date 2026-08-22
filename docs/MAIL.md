@@ -46,11 +46,22 @@ sudo bash backend/scripts/install-mail-server.sh --uninstall
 ## 3. DNS
 
 - `A` record: `mx.example.com` → mail server public IP (Cloudflare: **DNS only**)
-- MX per domain is **auto-created** by the dashboard when the zone exists
+- Apex MX per domain is **auto-created** by the dashboard when the zone exists
+- To receive mail for subdomains too, add a **wildcard MX** once per zone —
+  `*  MX 10 mx.example.com.` (or use a zone template containing it). One
+  wildcard MX covers every subdomain depth (RFC 4592), so no per-subdomain
+  MX record is ever needed
 
 ## 4. Use
 
-Tab **Mail** → add domain → the zone gets its MX record automatically and the mail server starts accepting `*@domain` (catch-all → forwarder).
+Tab **Mail** → add domain → the zone gets its apex MX automatically and the
+mail server starts accepting `*@domain` **and `*@anything.domain`** (catch-all
+→ forwarder) — provided the zone has a wildcard MX so subdomain mail actually
+routes to the server. The receiver matches the recipient domain against the
+list, so `user@example.com`, `user@abc.example.com` and
+`user@foo.bar.example.com` all work with a single list entry — the exact
+envelope recipient is forwarded unchanged (`X-Email-Envelope-To` /
+`EMAIL_ENVELOPE_TO`), so the backend knows which subdomain the mail was sent to.
 
 ## 5. Custom mail handling (webhook or your own script)
 

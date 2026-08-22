@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Scale the whole UI down to 75% (Tailwind sizes are rem-based) */
+html {
+    font-size: 75%;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
