@@ -1,6 +1,6 @@
 {
   "name": "@log1331/zoner",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "description": "Self-hosted PowerDNS management panel — web UI + API backend in one package",
   "type": "module",
   "license": "MIT",

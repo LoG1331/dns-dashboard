@@ -110,6 +110,23 @@ journalctl -u zoner-haraka -f
 #   [webhook] Forwarded user@your-domain -> https://your-app/v1/inbound/email
 ```
 
+## 7. Upgrade
+
+The installer is idempotent — re-run it from an updated checkout to refresh
+Haraka, the webhook plugin and the agent in place; it restarts both services
+so new plugin code is loaded:
+
+```bash
+sudo MX_HOSTNAME=mx.example.com \
+     WEBHOOK_URL=https://your-app/v1/inbound/email \
+     bash backend/scripts/install-mail-server.sh
+```
+
+To update only the plugin: copy `agent/haraka/webhook.js` over
+`/opt/zoner-mail/haraka/plugins/webhook.js` (keep the run-user ownership) and
+`systemctl restart zoner-haraka`. Note: `host_list` changes need no restart
+(read per-RCPT), but plugin code changes do.
+
 ## Migrating from the old Postfix stack
 
 The previous stack (Postfix + `mail-domain` + `mail-forwarder.py` + sudoers) is **not** removed by this script. To migrate: run the old script's `--uninstall` first (it removes `/opt/zoner-mail`, the sudoers rule, the `zoner` user and the `master.cf` block; Postfix itself can then be purged with `apt purge postfix`), then install the new stack.

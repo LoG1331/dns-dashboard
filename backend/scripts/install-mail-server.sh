@@ -209,6 +209,9 @@ EOF
   systemctl daemon-reload
   systemctl enable --now "$HARAKA_SERVICE"
   systemctl enable --now "$AGENT_SERVICE"
+  # re-running the installer is the upgrade path: code was re-copied above,
+  # enable --now alone would leave the old process running
+  systemctl restart "$HARAKA_SERVICE" "$AGENT_SERVICE"
 else
   echo "==> No systemd — starting via nohup (setcap fallback for port 25)"
   setcap 'cap_net_bind_service=+ep' "$NODE"
