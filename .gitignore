@@ -9,3 +9,4 @@ email_worker/
 firework/
 firework-js/
 
+.haraka-src/
