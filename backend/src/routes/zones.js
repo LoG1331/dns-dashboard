@@ -73,6 +73,91 @@ function pdnsError(res, err, fallback) {
   return res.status(500).json({ error: fallback });
 }
 
+// YYYYMMDDnn serial scheme, same as PowerDNS SOA-EDIT "DEFAULT": start at
+// today01, or bump the existing serial when it is already >= today01.
+function nextSoaSerial(current) {
+  const today =
+    Number(new Date().toISOString().slice(0, 10).replace(/-/g, "")) * 100 + 1;
+  return Math.max(today, (Number(current) || 0) + 1);
+}
+
+// SOA with the configured primary NS as mname. PowerDNS seeds a placeholder
+// SOA (a.misconfigured.dns.server.invalid., see default-soa-content) when a
+// zone is created without one, so new zones ship this instead.
+function buildSoaContent(apex) {
+  return [
+    NAMESERVERS()[0],
+    `hostmaster.${apex}`,
+    String(nextSoaSerial(0)),
+    "10800",
+    "3600",
+    "604800",
+    "3600",
+  ].join(" ");
+}
+
+// Legacy zones (or a changed NS config) carry stale delegation records:
+//  - SOA mname stuck at PowerDNS's placeholder (a.misconfigured.dns.server.
+//    invalid., see default-soa-content) or at a previous primary NS
+//  - apex NS set missing a nameserver added to the config later
+// Rewrite both to the configured nameservers. Slave zones are skipped —
+// their SOA/NS are owned by the master and refreshed via AXFR.
+async function healZone(apex) {
+  try {
+    const detail = await getPdnsZone(apex);
+    if (detail.kind === "Slave") return false;
+    const ns = NAMESERVERS();
+    if (!ns.length) return false;
+    const rrsets = [];
+
+    const soa = detail.rrsets.find((r) => r.type === "SOA" && r.name === apex);
+    const parts = (soa?.records?.[0]?.content || "").split(/\s+/);
+    if (parts[0] && !ns.some((n) => n.toLowerCase() === parts[0].toLowerCase())) {
+      rrsets.push({
+        name: apex,
+        type: "SOA",
+        ttl: soa.ttl || 3600,
+        changetype: "REPLACE",
+        records: [{
+          content: [
+            ns[0],
+            parts[1] || `hostmaster.${apex}`,
+            String(nextSoaSerial(parts[2])),
+            parts[3] || "10800",
+            parts[4] || "3600",
+            parts[5] || "604800",
+            parts[6] || "3600",
+          ].join(" "),
+          disabled: false,
+        }],
+      });
+    }
+
+    const existingNs = (
+      detail.rrsets.find((r) => r.type === "NS" && r.name === apex)?.records || []
+    ).map((r) => r.content.toLowerCase());
+    const wantNs = ns.map((n) => n.toLowerCase());
+    if (
+      existingNs.length !== wantNs.length ||
+      wantNs.some((n) => !existingNs.includes(n))
+    ) {
+      rrsets.push({
+        name: apex,
+        type: "NS",
+        ttl: 3600,
+        changetype: "REPLACE",
+        records: ns.map((n) => ({ content: n, disabled: false })),
+      });
+    }
+
+    if (!rrsets.length) return false;
+    await patchPdnsZone(apex, rrsets);
+    return true;
+  } catch {
+    return false; // zone missing on server / PowerDNS unreachable → skip
+  }
+}
+
 /** Import zones present in PowerDNS but missing from DB (assigned to user, status active) */
 export async function syncZones(userId) {
   try {
@@ -84,6 +169,10 @@ export async function syncZones(userId) {
         insertZone.run(crypto.randomUUID(), userId, name, "active");
         imported.push(name);
       }
+    }
+    // keep delegation records sane (placeholder/stale SOA mname, NS drift)
+    for (const z of zonesByUser.all(userId)) {
+      await healZone(fqdn(z.name));
     }
     return imported;
   } catch {
@@ -123,7 +212,21 @@ router.post("/", async (req, res) => {
     return res.status(409).json({ error: "Domain already registered" });
 
   try {
-    await createPdnsZone(fqdn(name), NAMESERVERS());
+    const ns = NAMESERVERS();
+    await createPdnsZone(
+      fqdn(name),
+      ns,
+      ns.length
+        ? [
+            {
+              name: fqdn(name),
+              type: "SOA",
+              ttl: 3600,
+              records: [{ content: buildSoaContent(fqdn(name)), disabled: false }],
+            },
+          ]
+        : undefined
+    );
   } catch (err) {
     return pdnsError(res, err, "Failed to create zone");
   }

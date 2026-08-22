@@ -45,11 +45,14 @@ async function request(method, path, body) {
   return res.json();
 }
 
-export const createPdnsZone = (name, nameservers) =>
+export const createPdnsZone = (name, nameservers, rrsets) =>
   request("POST", "/zones", {
     name,
     kind: getConfig().zoneKind, // Master if replication to secondaries is needed
     nameservers,
+    // without a SOA in the request, PowerDNS seeds its placeholder
+    // (a.misconfigured.dns.server.invalid.) — see default-soa-content
+    ...(rrsets ? { rrsets } : {}),
   });
 
 export const getPdnsZone = (name) =>
